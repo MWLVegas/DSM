@@ -14,6 +14,7 @@ var line = "";
 var online =0;
 var admins =0;
 var zeds =0;
+var animals=0;
 var total = 0;
 var fps = 0;
 
@@ -22,11 +23,11 @@ client.setKeepAlive(true,300);
 client.on('data', function(data) {
   line = data.toString().trim();//.replace("\r",'');
 
-//  if ( line.length <= 1 ) {
-//     return;
-//  }
+  if ( line.length <= 1 ) {
+     return;
+  }
 
-info('>>>'.red + line.reset + '<<<'.red);
+info('<<<'.red + line.reset + '<<<'.red);
 
 if ( line.match("Press 'exit'" ) ) {
   connected = true;
@@ -48,6 +49,13 @@ send(passwd,0);
   connected = false;
 });
 
+
+// Send Output
+  process.stdin.resume(); // Activate STDIN
+  process.stdin.setEncoding('utf8'); // Set it to string encoding
+  process.stdin.on('data',function(chunk){ // Pipe STDIN to Socket.out
+  send(chunk.toString() );
+});
 function contains(data) {
   if ( line.match(data) ) {
     return true;
@@ -55,9 +63,9 @@ function contains(data) {
   return false;
 }
 
-function send(data,timer) {
+function send(data) {
   client.write(data.toString().trim() + "\n");
-  //	console.log(">"+data.toString().trim()+"<");
+  console.log(">>>"+data.toString().trim()+"<");
 }
 
 function parseLine() {
@@ -67,8 +75,8 @@ if ( contains("INF Time" ) ) { // Mem
   fps = parseInt(out[out.length-20]);
   online = parseInt(out[out.length-10]);
   zeds = parseInt(out[out.length-8]);
-
-  info("FPS: " + fps + " Online: " + online + " Zombies: " + zeds );
+  animals = parseInt(out[out.length-6]) - zeds - online;
+  info("FPS: " + fps + " Online: " + online + " Zombies: " + zeds + " Animals: " + animals);
 }
 
 if ( online == -1 && contains("'lp") && contains("in the game") ) {
@@ -105,29 +113,20 @@ function doLoginStuff() {
 
 function getTotal() {
   total = -1;
-  send("lkp -online",200);
+  send("lkp -online");
 }
 
 function getZeds() {
   zeds = -1;
-  send("le",200);
+  send("le");
 }
 
 function getOnline() {
   online = -1;
-  send("lp",100);
+  send("lp");
 }
 
-// Output
 
-process.stdin.resume(); // Activate STDIN
-process.stdin.setEncoding('utf8'); // Set it to string encoding
-process.stdin.on('data',function(chunk){ // Pipe STDIN to Socket.out
-  client.write(chunk);
-  console.log("SEND:"+chunk.toString());
-});
 
-function suspend(time, func) {
-  setTimeout(func,time);
-}
+
 
