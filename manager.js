@@ -1,29 +1,32 @@
 var connect = require('net');
 var sleep = require('sleep');
+var colors = require('colors');
 
-
-var port = 8088;
-var host = 'localhost';
-var passwd = 'Alexander1';
+var port = 8098;
+var host = 'web.stuzzcraft.org';
+var passwd = 'RandomTestPassword';
 
 var connected = false;
 
 var client = connect.connect(port, host);
 var line = "";
 
+var online =0;
+var admins =0;
+var zeds =0;
+var total = 0;
+var fps = 0;
+
 client.setKeepAlive(true,300);
 
-console.log('Connection Success!\nSending password ...\n');
-send(passwd,0);
-
 client.on('data', function(data) {
-  line = data.toString().trim().replace("\r",'');
+  line = data.toString().trim();//.replace("\r",'');
 
-  if ( line.length <= 1 ) {
-     return;
-  }
+//  if ( line.length <= 1 ) {
+//     return;
+//  }
 
-console.log('RCVD:' + line + '<<<');
+info('>>>'.red + line.reset + '<<<'.red);
 
 if ( line.match("Press 'exit'" ) ) {
   connected = true;
@@ -31,23 +34,17 @@ if ( line.match("Press 'exit'" ) ) {
   doLoginStuff();
 }	
 
-if ( online == -1 && contains("Total of") && contains("in the game") ) {
-  var out = line.split(" ");
-  online = parseInt(out[out.length-4]);
-  info("Online Players: " + online);
-}
-
-if ( total == -1 && contains("Total of") && contains("known") ) {
-  var out1 = line.split(" ");
-  total = parseInt(out1[ out1.length-2]);
-  info("Total Players: " + total);
-}
+parseLine();
 
 }).on('connect', function() {
-  // Manually write an HTTP request.
-  //I'm assuming I could send data at this point here, on connect?
+
+console.log('Connection Success!\nSending password ...\n');
+send(passwd,0);
 }).on('end', function() {
   console.log('Disconnected');
+  connected = false;
+}).on('error', function() {
+  info("Connection refused.");
   connected = false;
 });
 
@@ -55,21 +52,45 @@ function contains(data) {
   if ( line.match(data) ) {
     return true;
   }
-
   return false;
 }
 
-
 function send(data,timer) {
-  sleep.usleep(timer * 1000);
   client.write(data.toString().trim() + "\n");
   //	console.log(">"+data.toString().trim()+"<");
 }
 
-var online =0;
-var admins =0;
-var zeds =0;
-var total = 0;
+function parseLine() {
+
+if ( contains("INF Time" ) ) { // Mem 
+  var out = line.split(" ");
+  fps = parseInt(out[out.length-20]);
+  online = parseInt(out[out.length-10]);
+  zeds = parseInt(out[out.length-8]);
+
+  info("FPS: " + fps + " Online: " + online + " Zombies: " + zeds );
+}
+
+if ( online == -1 && contains("'lp") && contains("in the game") ) {
+  var out = line.split(" ");
+  online = parseInt(out[out.length-4]);
+  info("Online Players: " + online);
+}
+
+if ( total == -1 && contains("'lkp") && contains("known") ) {
+  var out1 = line.split(" ");
+  total = parseInt(out1[ out1.length-2]);
+  info("Total Players: " + total);
+}
+
+if ( zeds == -1 && contains("'le") && contains("in the game") ) {
+  var out = line.split(" ");
+  zeds = parseInt(out[ out.length-2]);
+  info("Zeds Found: " + zeds);
+}
+
+
+}
 
 function info( data ) {
   console.log(data);
@@ -79,19 +100,22 @@ function doLoginStuff() {
   info("Running initial commands..");
   getOnline();
   getTotal();
+  getZeds();
 }
 
 function getTotal() {
   total = -1;
-  send("lkp --online",500);
-  //suspend( send("lkp --online"), 500);
-  //send("lkp --online");
+  send("lkp -online",200);
+}
+
+function getZeds() {
+  zeds = -1;
+  send("le",200);
 }
 
 function getOnline() {
   online = -1;
-  info("bleh");
-  send("lp", 500);
+  send("lp",100);
 }
 
 // Output
