@@ -9,6 +9,7 @@
   "author": "Raum",
   "license": "ISC",
   "dependencies": {
+    "hapi": "^11.1.4",
     "nodeunit": "^0.9.1",
     "sleep": "^3.0.0",
     "telnet-client": "^0.5.0",
