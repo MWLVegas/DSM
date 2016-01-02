@@ -278,7 +278,7 @@ addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
 
 function addCol(table,col,type, def) {
   serverdb.get("SELECT "+col+" FROM "+table+";", function(err,row) {
-    if ( err.toString().match("no such column") ) { 
+    if ( err != null && err.toString().match("no such column") ) { 
       serverdb.run("ALTER TABLE " + table + " ADD COLUMN " + col + " " + type+";");
       writedb("UPDATE " + table + " SET "+col+"=?;",def);
       info("Updating Table '"+table+"' : Adding Col '"+col+"' ("+type+")");
