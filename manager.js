@@ -1,15 +1,28 @@
-var connect = require('net');
+var net = require('net');
 var sleep = require('sleep');
 var colors = require('colors');
 var doEvery = require('doevery');
 
-var port = 8098;
-var host = 'web.stuzzcraft.org';
-var passwd = 'RandomTestPassword';
+var fs = require('fs');
+if ( !fs.existsSync("./db")) { fs.mkdirSync("./db"); }
+
+var sqlite3 = require('sqlite3').verbose();
+
+var serverdb;
+
+var serverid = 1;
+
+var port;// = 8098;
+var host;// = 'web.stuzzcraft.org';
+var passwd;// = 'RandomTestPassword';
 
 var connected = false;
 
-var client = connect.connect(port, host);
+initDB();
+
+var client = new net.Socket();
+
+//client.connect(port, host).setKeepAlive(true,300);
 var line = "";
 
 var online = 0;
@@ -18,12 +31,13 @@ var zeds = 0;
 var animals= 0;
 var total = 0;
 var fps = 0;
+var day = 0;
+
 var chatLog = [];
 var repeatingTasks = [];
 
-var reConnect = new doEvery('five seconds').on('hit', function() { tryConnect(); }).on('restart', function() { info("Starting reconnect timer ..."); }).on('stop', function() { info("Stopping reconnect timer ..."); });
+var reConnect = new doEvery('five seconds').on('hit', function() { if ( !connected) { tryConnect(); } }).on('restart', function() { info("Starting reconnect timer ..."); }).on('stop', function() { info("Stopping reconnect timer ..."); }).start();
 
-client.setKeepAlive(true,300);
 setupRepeatingTasks();
 
 client.on('data', function(data) {
@@ -47,16 +61,16 @@ client.on('data', function(data) {
 
   console.log('Connection Success!\nSending password ...\n');
   send(passwd,0);
-  reConnect.pause();
+  //reConnect.pause();
 }).on('end', function() {
   console.log('Disconnected');
   runRepeatingTasks(false);
   connected = false;
-  reConnect.restart();
+//  reConnect.restart();
 }).on('error', function() {
   info("Connection refused.");
   connected = false;
-  reConnect.restart();
+//  reConnect.restart();
 });
 
 
@@ -92,13 +106,16 @@ function isCommand()
       default: if ( isCustomCommand(cmd,player) ) { return true; } else { return false; }
                  //info("No command found."); return false;
       case 'recent': showRecentChat(player); break;
+      case 'sethome': sethome(player); break;
+      case 'home': gohome(player); break;
+
     }
 
     //TODO  Valid Command: Log it to Web Console
     return true;
 
   }
-
+  // Not a command
   return false;
 }
 
@@ -121,7 +138,7 @@ function pm(player, msg) {
   send("pm " + player + " \"" + msg.replace(/\"/g, "'") + "\"");
 }
 
-var stamp = "%H:%M:%S";
+var stamp = "[c01155]%H:%M:%S[FFFFFF]";
 function timeStamp() {
   var date = new Date();
   return stamp.replace (/%[YmdHMS]/g, function (m) {
@@ -156,13 +173,23 @@ function parseLine() {
       return;
     }
     // Store last few messages
-    chatLog.unshift( timeStamp() + line.substr(line.indexOf("INF GMSG:")+10) );
+    chatLog.unshift( timeStamp() + " " + line.substr(line.indexOf("INF GMSG:")+10) );
     if (chatLog.length >= 11) { // keep the saved log short
       chatLog.pop();
     }
 
 
     //TODO Output to web console
+  }
+
+  if ( contains("INF Spawned") ) {
+    var out = line.split(" ");
+    var found = parseInt(out[out.length-3].substring(4));
+    if ( found != day ) { // New Day
+      info("New day: " + found);
+      day = found;
+    }
+
   }
 
   if ( total == -1 && contains("Total of") && contains("known") ) {
@@ -213,9 +240,45 @@ function setupRepeatingTasks() {
 }
 
 function tryConnect() {
-  info("Attempting to connect ...");
-  client = connect.connect(port, host);
+  info("Attempting to connect to " + host + " : " + port);
+  client.connect(port, host).setKeepAlive(true,300);
 }
 
 
+function initDB() {
+  var newserver = false;
+
+  if ( !fs.existsSync("./db/"+serverid+".sqlite")) {  // Server DB doesn't Exist
+    info("Server DB doesn't exist. Creating ...");
+    newserver = true;
+  }
+
+
+  serverdb = new sqlite3.Database('db/'+serverid+'.sqlite');
+
+  if ( newserver ) { // Create new server database crap
+    serverdb.run("CREATE TABLE server_info ( host TEXT, port INTEGER, pass TEXT ) ");
+    writedb("INSERT INTO server_info VALUES(?,?,?)", "web.stuzzcraft.org", 8098, "RandomTestPassword");
+   }
+
+
+  serverdb.get("SELECT host FROM server_info;", function(err,row) { host = row.host; info("Host: " + host) });
+  serverdb.get("SELECT port FROM server_info;", function(err,row) { port = row.port; info("Port: " + port) });
+  serverdb.get("SELECT pass FROM server_info;", function(err,row) { passwd = row.pass; });
+
+}
+
+function writedb() {
+  var query = arguments[0];
+  var args = []; 
+  for ( var i = 1; i < arguments.length; i++ ) { args[i-1] = arguments[i]; }
+  serverdb.serialize( function () {
+  var stmt = serverdb.prepare(query);
+  stmt.run(args);
+  stmt.finalize();
+  //serverdb.run(query,args);
+  //var statement = serverdb.prepare(arguments[0], for ( var i = 1; i < arguments.length; i++) { arguments[i] } );
+  });
+
+}
 
