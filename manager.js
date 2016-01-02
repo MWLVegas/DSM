@@ -15,6 +15,7 @@ var serverid = 1;
 var port;// = 8098;
 var host;// = 'web.stuzzcraft.org';
 var passwd;// = 'RandomTestPassword';
+var stamp;
 
 var connected = false;
 
@@ -138,7 +139,6 @@ function pm(player, msg) {
   send("pm " + player + " \"" + msg.replace(/\"/g, "'") + "\"");
 }
 
-var stamp = "[c01155]%H:%M:%S[FFFFFF]";
 function timeStamp() {
   var date = new Date();
   return stamp.replace (/%[YmdHMS]/g, function (m) {
@@ -258,13 +258,32 @@ function initDB() {
 
   if ( newserver ) { // Create new server database crap
     serverdb.run("CREATE TABLE server_info ( host TEXT, port INTEGER, pass TEXT ) ");
-    writedb("INSERT INTO server_info VALUES(?,?,?)", "web.stuzzcraft.org", 8098, "RandomTestPassword");
+    writedb("INSERT INTO server_info (host,port,pass) VALUES(?,?,?)", "web.stuzzcraft.org", 8098, "RandomTestPassword");
    }
 
+  updateDB();
 
+  setTimeout( function() { 
   serverdb.get("SELECT host FROM server_info;", function(err,row) { host = row.host; info("Host: " + host) });
   serverdb.get("SELECT port FROM server_info;", function(err,row) { port = row.port; info("Port: " + port) });
   serverdb.get("SELECT pass FROM server_info;", function(err,row) { passwd = row.pass; });
+  serverdb.get("SELECT stamp FROM server_info;", function(err,row) { stamp = row.stamp; });
+  }, 1000);
+
+}
+
+function updateDB() {
+addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
+}
+
+function addCol(table,col,type, def) {
+  serverdb.get("SELECT "+col+" FROM "+table+";", function(err,row) {
+    if ( err.toString().match("no such column") ) { 
+      serverdb.run("ALTER TABLE " + table + " ADD COLUMN " + col + " " + type+";");
+      writedb("UPDATE " + table + " SET "+col+"=?;",def);
+      info("Updating Table '"+table+"' : Adding Col '"+col+"' ("+type+")");
+    }
+  }  );
 
 }
 
