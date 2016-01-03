@@ -36,6 +36,7 @@ var day = 0;
 
 var chatLog = [];
 var repeatingTasks = [];
+var playerList = [];
 
 var reConnect = new doEvery('five seconds').on('hit', function() { if ( !connected) { tryConnect(); } }).on('restart', function() { info("Starting reconnect timer ..."); }).on('stop', function() { info("Stopping reconnect timer ..."); }).start();
 
@@ -48,7 +49,9 @@ client.on('data', function(data) {
     return;
   }
 
-  info('<<<'.red + line.reset + '<<<'.red);
+  if ( contains("Executing command") ||  contains("Adding observed") || contains("Removing observed") ) { }
+  else
+    console.log('<'.red + line.reset + '<'.red);
 
   if ( line.match("Press 'exit'" ) ) {
     connected = true;
@@ -91,7 +94,7 @@ function contains(data) {
 
 function send(data) {
   client.write(data.toString().trim() + "\n");
-  console.log(">>>"+data.toString().trim()+"<");
+  console.log( colors.magenta(">") + data.toString().trim().reset+ colors.magenta("<") );
 }
 
 function isCommand()
@@ -153,7 +156,7 @@ function timeStamp() {
     }
     // add leading zero if required
     return ('0' + m).slice (-2);
-  });
+  });i
 }
 
 function parseLine() {
@@ -212,39 +215,87 @@ function parseLine() {
     for (var i = 0; i < out.length-1; i++ ) {
       if ( out[i].match("steamid")) { updatePlayerLPK(out[i]); }
     }
+
+ }
+ 
+
+  if ( contains("Spawning scouts") ) {
+    line = line + "\n";
+    var out = line.split("\n");
+    for (var i = 0; i < out.length-1; i++ ) {
+      if ( out[i].match("Spawning scouts")) { announceScreamer(out[i]); }
+    }
   }
+
+  //  8 INF Player Raum disconnected after 514.1 minutes<
+  if ( contains("disconnected after") && contains("INF Player") )  {
+    var out = line.split("\n");
+    for (var i = 0; i < out.length-1; i++ ) {
+      if ( out[i].match("disconnected after")) {
+        var out1 = out[i].substr(out[i].indexOf("INF Player")).split(" ");
+          delete playerList[out1[3]];
+      }
+    }
+  }
+}
+
+function announceScreamer(data) {
+
+  //  INF Spawned [type=EntityZombie, name=zombieScreamer, id=535] at (2829.5, 140.0, 1925.5) Day=6 TotalInWave=2 CurrentWave=1<<<
+  //  AIDirector: Spawning scouts @ ((4688.0, 163.0, 1528.0)) heading towards ((4619.0, 179.0, 1614.0))<<<
+  data = data.substr(data.lastIndexOf("((")+2).split(")");
+  var loc1 = data[0];
+  info( "Screamer Spawn: " + loc1);
+  for ( var x in playerList )
+  {
+    var loc2 = playerList[x].pos;
+    var dist = getDistance(loc1,loc2);
+    if ( dist < 35 ) { pm(x,"[cc0000]WARNING: There is a Screamer heading in your direction!"); }
+    info("Distance: " + x + " " +  dist );
+  }
+}
+
+function getDistance(l1, l2) {
+
+  var loc1 = l1.split(/,| /);
+  var loc2 = l2.split(/,| /);
+  var x = Math.pow(loc1[0] - loc2[0],2);
+  var z = Math.pow(loc1[2] - loc2[2],2);
+  return Math.sqrt(x+z);
 
 }
 
 function info( data ) {
-  console.log(data);
+  console.log("**".green + data.reset);
 }
 
 function doLoginStuff() {
   info("Running initial commands..");
   runRepeatingTasks(true);
-  getTotal();
+  send("lp");
 }
 
-function getTotal() {
-  total = -1;
-  send("lkp -online");
-}
-
-function repeat(timer, func, name) {
-  var task = new doEvery(timer).on('hit', func );
-  task.start();
-  task.pause();
-  repeatingTasks.push( task );
-  info("Task added for " + timer + ": " + name);
+function repeat(timer, func, named) {
+  var thetask = new doEvery(timer).on('hit', func );
+  thetask.start();
+  thetask.pause();
+  repeatingTasks.push( {name: named, task:thetask } );
+  info("Task added for " + timer + ": " + named);
 }
 
 function runRepeatingTasks(op) {
 
-  repeatingTasks.forEach( function(task) {
-    if ( op == true ) { task.restart(); info("Tasks starting.");  }
-    else { task.pause(); info("Tasks pausing."); }
-  },this);
+  info(colors.yellow("Repeating tasks " + (op ? "starting." : "pausing.")));
+  for ( var x in repeatingTasks) {
+    var val = repeatingTasks[x]; 
+    if ( op == true ) { val.task.restart(); } // info("Tasks starting."); }
+  else { val.task.pause(); } // info("Tasks pausing."); }
+  }
+
+//  repeatingTasks.forEach( function(task) {
+//    if ( op == true ) { task.restart(); info("Tasks starting.");  }
+//    else { task.pause(); info("Tasks pausing."); }
+//  },this);
 }
 
 
@@ -252,6 +303,9 @@ function runRepeatingTasks(op) {
 function setupRepeatingTasks() {
   //  repeat('fifteen seconds', function() { send("saveworld"); info("Saving world..."); }, "World Save");
   repeat('fifteen minutes', function() { send("saveworld"); info("Saving world..."); }, "World Save");
+  repeat('ten seconds', function() { send("lp"); }, "LP Update");
+  repeat('eleven seconds', function() { send("lkp -online"); }, "LPK Update");
+
   info("Total repeating tasks: " + repeatingTasks.length);
 }
 
@@ -264,12 +318,17 @@ function updatePlayerLP(str) {
   //1. id=171, Raum, pos=(2911.8, 145.3, 1856.5), rot=(-64.7, -1430.2, 0.0), remote=True, health=100, deaths=0, zombies=14, players=0, score=14, level=1, steamid=76561198004533621, ip=184.2.196.249, ping=170
   var out1 = str.substr(str.indexOf("(")+1).split(")");;
   var out2 = str.substr(str.indexOf("remote")).replace(/,/g,"").trim().split(/=| /);
-//  out1[0] = position
-//  info(out2);
-  writedb("INSERT OR IGNORE INTO player_info(steamID,online,position,zkills,pkills,score,level,ip,deaths) VALUES(?,?,?,?,?,?,?,?,?)",parseInt(out2[15]), true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
-  writedb("UPDATE player_info SET online=?, position=?, zkills=?, pkills=?, score=?, level=?, ip=?, deaths=? WHERE steamID=?;", true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5], parseInt(out2[15]) );
+  //  out1[0] = position
+  var out = str.split(",");
+  var name = out[1].trim();
+  //  info(out2);
+  writedb("INSERT OR IGNORE INTO player_info(steamID,name,online,position,zkills,pkills,score,level,ip,deaths) VALUES(?,?,?,?,?,?,?,?,?,?)",parseInt(out2[15]), name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
+  writedb("UPDATE player_info SET name=?, online=?, position=?, zkills=?, pkills=?, score=?, level=?, ip=?, deaths=? WHERE steamID=?;", name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5], parseInt(out2[15]) );
 
-
+  if ( name in playerList ) 
+    playerList[name].pos = out1[0];
+  else
+    playerList[name] = { pos: out1[0], steamid: parseInt(out2[15]) };
 }
 
 function updatePlayerLPK(str) {
@@ -281,7 +340,11 @@ function updatePlayerLPK(str) {
   // name,id,steamid,online,ip,playtime,seen year/time
   writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip) VALUES(?,?,?,?,?)", parseInt(player[2]), player[0], player[1], player[3], player[4]);
   writedb("UPDATE player_info SET name=?, plid=?, online=?, ip=? WHERE steamID=?;",player[0], player[1], player[3].match("True") ? true : false, player[4], player[2]);
-  
+
+
+  if ( name in playerList )
+    playerList[name].steamid = parseInt(player[2]);
+
 }
 
 function initDB() {
