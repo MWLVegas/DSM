@@ -67,11 +67,11 @@ client.on('data', function(data) {
   console.log('Disconnected');
   runRepeatingTasks(false);
   connected = false;
-//  reConnect.restart();
+  //  reConnect.restart();
 }).on('error', function() {
   info("Connection refused.");
   connected = false;
-//  reConnect.restart();
+  //  reConnect.restart();
 });
 
 
@@ -198,6 +198,22 @@ function parseLine() {
     info("Total Players: " + total);
   }
 
+  if ( contains("steamid") && contains ("score") ) { // LP
+    var out = line.split("\n");
+    for (var i = 0; i < out.length-1; i++ ) {
+      if ( out[i].match("steamid")) { updatePlayerLP(out[i]); }
+    }
+
+  }
+
+  if ( contains("steamid") && contains("playtime") ) // LKP
+  {
+    var out = line.split("\n");
+    for (var i = 0; i < out.length-1; i++ ) {
+      if ( out[i].match("steamid")) { updatePlayerLPK(out[i]); }
+    }
+  }
+
 }
 
 function info( data ) {
@@ -244,6 +260,29 @@ function tryConnect() {
   client.connect(port, host).setKeepAlive(true,300);
 }
 
+function updatePlayerLP(str) {
+  //1. id=171, Raum, pos=(2911.8, 145.3, 1856.5), rot=(-64.7, -1430.2, 0.0), remote=True, health=100, deaths=0, zombies=14, players=0, score=14, level=1, steamid=76561198004533621, ip=184.2.196.249, ping=170
+  var out1 = str.substr(str.indexOf("(")+1).split(")");;
+  var out2 = str.substr(str.indexOf("remote")).replace(/,/g,"").trim().split(/=| /);
+//  out1[0] = position
+//  info(out2);
+  writedb("INSERT OR IGNORE INTO player_info(steamID,online,position,zkills,pkills,score,level,ip,deaths) VALUES(?,?,?,?,?,?,?,?,?)",parseInt(out2[15]), true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
+  writedb("UPDATE player_info SET online=?, position=?, zkills=?, pkills=?, score=?, level=?, ip=?, deaths=? WHERE steamID=?;", true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5], parseInt(out2[15]) );
+
+
+}
+
+function updatePlayerLPK(str) {
+  //1. Raum, id=171, steamid=76561198004533621, online=True, ip=184.2.196.249, playtime=336 m, seen=2016-01-02 23:49
+  var name = str.substr(str.indexOf(" ")+1,str.indexOf(",")-1-str.indexOf(" ") );
+  data = str.substr( str.indexOf(",")+1 ).replace(/,/g,"").trim();
+  var out = data.split(/=| /);
+  var player = [ name, out[1], out[3], out[5], out[7], out[9], out[12] +" "+ out[13] ];
+  // name,id,steamid,online,ip,playtime,seen year/time
+  writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip) VALUES(?,?,?,?,?)", parseInt(player[2]), player[0], player[1], player[3], player[4]);
+  writedb("UPDATE player_info SET name=?, plid=?, online=?, ip=? WHERE steamID=?;",player[0], player[1], player[3].match("True") ? true : false, player[4], player[2]);
+  
+}
 
 function initDB() {
   var newserver = false;
@@ -259,21 +298,31 @@ function initDB() {
   if ( newserver ) { // Create new server database crap
     serverdb.run("CREATE TABLE server_info ( host TEXT, port INTEGER, pass TEXT ) ");
     writedb("INSERT INTO server_info (host,port,pass) VALUES(?,?,?)", "web.stuzzcraft.org", 8098, "RandomTestPassword");
-   }
+  }
 
   updateDB();
 
   setTimeout( function() { 
-  serverdb.get("SELECT host FROM server_info;", function(err,row) { host = row.host; info("Host: " + host) });
-  serverdb.get("SELECT port FROM server_info;", function(err,row) { port = row.port; info("Port: " + port) });
-  serverdb.get("SELECT pass FROM server_info;", function(err,row) { passwd = row.pass; });
-  serverdb.get("SELECT stamp FROM server_info;", function(err,row) { stamp = row.stamp; });
+    serverdb.get("SELECT * FROM server_info;", function(err,row) { host = row.host; port = row.port, passwd = row.pass, stamp = row.stamp; info("Host: " + host + "\nPort: " + port); });
+    //  serverdb.get("SELECT host FROM server_info;", function(err,row) { host = row.host; info("Host: " + host) });
+    //  serverdb.get("SELECT port FROM server_info;", function(err,row) { port = row.port; info("Port: " + port) });
+    //  serverdb.get("SELECT pass FROM server_info;", function(err,row) { passwd = row.pass; });
+    //  serverdb.get("SELECT stamp FROM server_info;", function(err,row) { stamp = row.stamp; });
   }, 1000);
 
 }
 
 function updateDB() {
-addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
+  addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
+  addTable("player_info", "steamID LONG PRIMARY KEY, online BOOLEAN, position TEXT, name TEXT, zkills INTEGER, pkills INTEGER, score INTEGER, level INTEGER, ip TEXT, deaths INTEGER, coins DOUBLE, home TEXT, plid INTEGER");
+}
+
+function addTable(table,data) {
+  serverdb.get("SELECT * FROM "+ table+";", function(err,row) { if ( err != null && err.toString().match("no such table") ) {
+    info("Adding table '" + table + "'");
+    serverdb.run("CREATE TABLE " + table + "("+data+");");
+  }
+  });
 }
 
 function addCol(table,col,type, def) {
@@ -292,11 +341,11 @@ function writedb() {
   var args = []; 
   for ( var i = 1; i < arguments.length; i++ ) { args[i-1] = arguments[i]; }
   serverdb.serialize( function () {
-  var stmt = serverdb.prepare(query);
-  stmt.run(args);
-  stmt.finalize();
-  //serverdb.run(query,args);
-  //var statement = serverdb.prepare(arguments[0], for ( var i = 1; i < arguments.length; i++) { arguments[i] } );
+    var stmt = serverdb.prepare(query);
+    stmt.run(args);
+    stmt.finalize();
+    //serverdb.run(query,args);
+    //var statement = serverdb.prepare(arguments[0], for ( var i = 1; i < arguments.length; i++) { arguments[i] } );
   });
 
 }
