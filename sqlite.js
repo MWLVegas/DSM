@@ -134,27 +134,20 @@ function gohome(player) {
   }
 
   var steamid = playerList[player].steamid;
-  serverdb.get("SELECT * FROM player_info WHERE steamID='"+steamid+"';", function(err,row) { 
-    if (err) {
-      error(row);
-    } else {
-      info(row); 
-      var coords = row.home ;
-      info("COORDS: " + coords + " :: " + steamid);
-      if ( coords.trim().length <= 1 ) {
-        pm(player,"You do not have a home set. Use /sethome to set it to your current location.");
-        return;
-      }
-  
-      // TODO Cost Stuff
-      // TODO Timer
-      coords.replace(',','');
-      send("teleportplayer " + player + " " + coords);
-      // Set Last-Used
+  var coords = "";
+  console.log("SteamId: "+steamid);
+  serverdb.get("SELECT * FROM player_info WHERE steamID='"+steamid+"';", function(err,row) { info(row); coords = row.home });
+  info("COORDS: " + coords + " :: " + steamid);
+  if ( coords.trim().length <= 1 )
+  {
+    pm(player,"You do not have a home set. Use /sethome to set it to your current location.");
+    return;
+  }
 
-    }
-  });
-
+  // TODO Cost Stuff
+  // TODO Timer
+  send("teleportplayer " + player + " " + coords);
+  // Set Last-Used
 }
 
 function canUseHome(player) {
@@ -279,17 +272,7 @@ function getDistance(l1, l2) {
   return Math.sqrt(x+z);
 }
 
-function error( data ) {
-  if (typeof(data) === 'object') {
-    data = JSON.stringify(data);
-  }
-  console.log("**".red+ data.reset);
-}
-
 function info( data ) {
-  if (typeof(data) === 'object') {
-    data = JSON.stringify(data);
-  }
   console.log("**".green + data.reset);
 }
 

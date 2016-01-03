@@ -10,6 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "colors": "^1.1.2",
+    "doevery": "0.0.4",
     "hapi": "^11.1.4",
     "nodeunit": "^0.9.1",
     "sleep": "^3.0.0",
