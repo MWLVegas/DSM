@@ -2,6 +2,7 @@ var net = require('net');
 var sleep = require('sleep');
 var colors = require('colors');
 var doEvery = require('doevery');
+
 var fs = require('fs');
 if ( !fs.existsSync("./db")) { fs.mkdirSync("./db"); }
 var sqlite3 = require('sqlite3').verbose();
@@ -95,11 +96,9 @@ function isCommand()
 
     switch(cmd) {
       default: if ( isCustomCommand(cmd,player) ) { return true; } else { return false; }
-                 //info("No command found."); return false;
       case 'recent': showRecentChat(player); break;
       case 'sethome': sethome(player); break;
       case 'home': gohome(player); break;
-
     }
 
     //TODO  Valid Command: Log it to Web Console
@@ -115,6 +114,44 @@ function isCustomCommand(cmd, player)
   // TODO Custom Command crapola
   info("No command found.");
   return false;
+}
+
+function sethome(player) {
+  // TODO Cost STuff
+
+  var coords = playerList[player].pos;
+  var steamid = playerList[player].steamid;
+
+  writedb("UPDATE player_info SET home=? WHERE steamID='"+steamid+"';", coords);
+
+  pm(player,"Home set: " + coords);
+}
+
+function gohome(player) {
+  if ( !canUseHome(player) ) {
+    pm(player,"You cannot use home yet.");
+    return;
+  }
+
+  var steamid = playerList[player].steamid;
+  var coords = "";
+  serverdb.get("SELECT * FROM player_info WHERE steamID='"+steamid+"';", function(err,row) { info(row); coords = row.home });
+  info("COORDS: " + coords + " :: " + steamid);
+  if ( coords.trim().length <= 1 )
+  {
+    pm(player,"You do not have a home set. Use /sethome to set it to your current location.");
+    return;
+  }
+
+  // TODO Cost Stuff
+  // TODO Timer
+  send("teleportplayer " + player + " " + coords);
+  // Set Last-Used
+}
+
+function canUseHome(player) {
+  return true;
+  // TODO Add timer/costs
 }
 
 function showRecentChat(player) {
@@ -281,13 +318,13 @@ function updatePlayerLP(str) {
   var out = str.split(",");
   var name = out[1].trim();
   //  info(out2);
-  writedb("INSERT OR IGNORE INTO player_info(steamID,name,online,position,zkills,pkills,score,level,ip,deaths) VALUES(?,?,?,?,?,?,?,?,?,?)",parseInt(out2[15]), name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
-  writedb("UPDATE player_info SET name=?, online=?, position=?, zkills=?, pkills=?, score=?, level=?, ip=?, deaths=? WHERE steamID=?;", name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5], parseInt(out2[15]) );
+  writedb("INSERT OR IGNORE INTO player_info(steamID,name,online,position,zkills,pkills,score,level,ip,deaths) VALUES(?,?,?,?,?,?,?,?,?,?)",out2[15], name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
+  writedb("UPDATE player_info SET name=?, online=?, position=?, zkills=?, pkills=?, score=?, level=?, ip=?, deaths=? WHERE steamID=?;", name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5], out2[15] );
 
   if ( name in playerList ) 
     playerList[name].pos = out1[0];
   else
-    playerList[name] = { pos: out1[0], steamid: parseInt(out2[15]) };
+    playerList[name] = { pos: out1[0], steamid: out2[15] };
 }
 
 function updatePlayerLPK(str) {
@@ -297,11 +334,11 @@ function updatePlayerLPK(str) {
   var out = data.split(/=| /);
   var player = [ name, out[1], out[3], out[5], out[7], out[9], out[12] +" "+ out[13] ];
   // name,id,steamid,online,ip,playtime,seen year/time
-  writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip) VALUES(?,?,?,?,?)", parseInt(player[2]), player[0], player[1], player[3], player[4]);
+  writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip) VALUES(?,?,?,?,?)", player[2], player[0], player[1], player[3], player[4]);
   writedb("UPDATE player_info SET name=?, plid=?, online=?, ip=? WHERE steamID=?;",player[0], player[1], player[3].match("True") ? true : false, player[4], player[2]);
 
   if ( name in playerList )
-    playerList[name].steamid = parseInt(player[2]);
+    playerList[name].steamid = player[2];
 }
 
 function initDB() {
@@ -329,7 +366,7 @@ function initDB() {
 
 function updateDB() {
   addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
-  addTable("player_info", "steamID LONG PRIMARY KEY, online BOOLEAN, position TEXT, name TEXT, zkills INTEGER, pkills INTEGER, score INTEGER, level INTEGER, ip TEXT, deaths INTEGER, coins DOUBLE, home TEXT, plid INTEGER");
+  addTable("player_info", "steamID TEXT PRIMARY KEY, online BOOLEAN, position TEXT, name TEXT, zkills INTEGER, pkills INTEGER, score INTEGER, level INTEGER, ip TEXT, deaths INTEGER, coins DOUBLE, home TEXT, plid INTEGER");
 }
 
 function addTable(table,data) {
