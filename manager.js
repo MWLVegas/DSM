@@ -2,30 +2,21 @@ var net = require('net');
 var sleep = require('sleep');
 var colors = require('colors');
 var doEvery = require('doevery');
-
 var fs = require('fs');
 if ( !fs.existsSync("./db")) { fs.mkdirSync("./db"); }
-
 var sqlite3 = require('sqlite3').verbose();
-
 var serverdb;
-
 var serverid = 1;
-
-var port;// = 8098;
-var host;// = 'web.stuzzcraft.org';
-var passwd;// = 'RandomTestPassword';
+var port;
+var host;
+var passwd;
 var stamp;
-
 var connected = false;
 
-initDB();
+  initDB();
 
 var client = new net.Socket();
-
-//client.connect(port, host).setKeepAlive(true,300);
 var line = "";
-
 var online = 0;
 var admins = 0;
 var zeds = 0;
@@ -33,7 +24,6 @@ var animals= 0;
 var total = 0;
 var fps = 0;
 var day = 0;
-
 var chatLog = [];
 var repeatingTasks = [];
 var playerList = [];
@@ -43,7 +33,7 @@ var reConnect = new doEvery('five seconds').on('hit', function() { if ( !connect
 setupRepeatingTasks();
 
 client.on('data', function(data) {
-  line = data.toString().trim();//.replace("\r",'');
+  line = data.toString().trim();
 
   if ( line.length <= 1 ) {
     return;
@@ -65,16 +55,13 @@ client.on('data', function(data) {
 
   console.log('Connection Success!\nSending password ...\n');
   send(passwd,0);
-  //reConnect.pause();
 }).on('end', function() {
   console.log('Disconnected');
   runRepeatingTasks(false);
   connected = false;
-  //  reConnect.restart();
 }).on('error', function() {
   info("Connection refused.");
   connected = false;
-  //  reConnect.restart();
 });
 
 
@@ -125,7 +112,6 @@ function isCommand()
 
 function isCustomCommand(cmd, player)
 {
-
   // TODO Custom Command crapola
   info("No command found.");
   return false;
@@ -152,9 +138,8 @@ function timeStamp() {
       case '%H': m = date.getHours(); break;
       case '%M': m = date.getMinutes(); break;
       case '%S': m = date.getSeconds(); break;
-      default: return m.slice (1); // unknown code, remove %
+      default: return m.slice (1); 
     }
-    // add leading zero if required
     return ('0' + m).slice (-2);
   });i
 }
@@ -169,6 +154,7 @@ function parseLine() {
     animals = parseInt(out[out.length-6]) - zeds - online;
     info("FPS: " + fps + " Online: " + online + " Zombies: " + zeds + " Animals: " + animals);
   }
+
   if ( contains("INF GMSG") ) { // Chat
     if ( isCommand(line) ) 
     {
@@ -180,25 +166,16 @@ function parseLine() {
     if (chatLog.length >= 11) { // keep the saved log short
       chatLog.pop();
     }
-
-
     //TODO Output to web console
   }
 
-  if ( contains("INF Spawned") ) {
+  if ( contains("INF Spawned") ) { // Catch time
     var out = line.split(" ");
     var found = parseInt(out[out.length-3].substring(4));
     if ( found != day ) { // New Day
       info("New day: " + found);
       day = found;
     }
-
-  }
-
-  if ( total == -1 && contains("Total of") && contains("known") ) {
-    var out1 = line.split(" ");
-    total = parseInt(out1[ out1.length-2]);
-    info("Total Players: " + total);
   }
 
   if ( contains("steamid") && contains ("score") ) { // LP
@@ -206,7 +183,6 @@ function parseLine() {
     for (var i = 0; i < out.length-1; i++ ) {
       if ( out[i].match("steamid")) { updatePlayerLP(out[i]); }
     }
-
   }
 
   if ( contains("steamid") && contains("playtime") ) // LKP
@@ -215,11 +191,9 @@ function parseLine() {
     for (var i = 0; i < out.length-1; i++ ) {
       if ( out[i].match("steamid")) { updatePlayerLPK(out[i]); }
     }
-
  }
- 
 
-  if ( contains("Spawning scouts") ) {
+  if ( contains("Spawning scouts") ) { // Announce Screamers
     line = line + "\n";
     var out = line.split("\n");
     for (var i = 0; i < out.length-1; i++ ) {
@@ -227,8 +201,7 @@ function parseLine() {
     }
   }
 
-  //  8 INF Player Raum disconnected after 514.1 minutes<
-  if ( contains("disconnected after") && contains("INF Player") )  {
+  if ( contains("disconnected after") && contains("INF Player") )  { // Disconnects
     var out = line.split("\n");
     for (var i = 0; i < out.length-1; i++ ) {
       if ( out[i].match("disconnected after")) {
@@ -240,8 +213,6 @@ function parseLine() {
 }
 
 function announceScreamer(data) {
-
-  //  INF Spawned [type=EntityZombie, name=zombieScreamer, id=535] at (2829.5, 140.0, 1925.5) Day=6 TotalInWave=2 CurrentWave=1<<<
   //  AIDirector: Spawning scouts @ ((4688.0, 163.0, 1528.0)) heading towards ((4619.0, 179.0, 1614.0))<<<
   data = data.substr(data.lastIndexOf("((")+2).split(")");
   var loc1 = data[0];
@@ -256,13 +227,11 @@ function announceScreamer(data) {
 }
 
 function getDistance(l1, l2) {
-
   var loc1 = l1.split(/,| /);
   var loc2 = l2.split(/,| /);
   var x = Math.pow(loc1[0] - loc2[0],2);
   var z = Math.pow(loc1[2] - loc2[2],2);
   return Math.sqrt(x+z);
-
 }
 
 function info( data ) {
@@ -270,7 +239,7 @@ function info( data ) {
 }
 
 function doLoginStuff() {
-  info("Running initial commands..");
+  info("Running initial commands...");
   runRepeatingTasks(true);
   send("lp");
 }
@@ -284,28 +253,18 @@ function repeat(timer, func, named) {
 }
 
 function runRepeatingTasks(op) {
-
   info(colors.yellow("Repeating tasks " + (op ? "starting." : "pausing.")));
   for ( var x in repeatingTasks) {
     var val = repeatingTasks[x]; 
-    if ( op == true ) { val.task.restart(); } // info("Tasks starting."); }
-  else { val.task.pause(); } // info("Tasks pausing."); }
+    if ( op == true ) { val.task.restart(); }
+  else { val.task.pause(); } 
   }
-
-//  repeatingTasks.forEach( function(task) {
-//    if ( op == true ) { task.restart(); info("Tasks starting.");  }
-//    else { task.pause(); info("Tasks pausing."); }
-//  },this);
 }
 
-
-
 function setupRepeatingTasks() {
-  //  repeat('fifteen seconds', function() { send("saveworld"); info("Saving world..."); }, "World Save");
   repeat('fifteen minutes', function() { send("saveworld"); info("Saving world..."); }, "World Save");
   repeat('ten seconds', function() { send("lp"); }, "LP Update");
   repeat('eleven seconds', function() { send("lkp -online"); }, "LPK Update");
-
   info("Total repeating tasks: " + repeatingTasks.length);
 }
 
@@ -341,10 +300,8 @@ function updatePlayerLPK(str) {
   writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip) VALUES(?,?,?,?,?)", parseInt(player[2]), player[0], player[1], player[3], player[4]);
   writedb("UPDATE player_info SET name=?, plid=?, online=?, ip=? WHERE steamID=?;",player[0], player[1], player[3].match("True") ? true : false, player[4], player[2]);
 
-
   if ( name in playerList )
     playerList[name].steamid = parseInt(player[2]);
-
 }
 
 function initDB() {
@@ -354,7 +311,6 @@ function initDB() {
     info("Server DB doesn't exist. Creating ...");
     newserver = true;
   }
-
 
   serverdb = new sqlite3.Database('db/'+serverid+'.sqlite');
 
@@ -367,10 +323,6 @@ function initDB() {
 
   setTimeout( function() { 
     serverdb.get("SELECT * FROM server_info;", function(err,row) { host = row.host; port = row.port, passwd = row.pass, stamp = row.stamp; info("Host: " + host + "\nPort: " + port); });
-    //  serverdb.get("SELECT host FROM server_info;", function(err,row) { host = row.host; info("Host: " + host) });
-    //  serverdb.get("SELECT port FROM server_info;", function(err,row) { port = row.port; info("Port: " + port) });
-    //  serverdb.get("SELECT pass FROM server_info;", function(err,row) { passwd = row.pass; });
-    //  serverdb.get("SELECT stamp FROM server_info;", function(err,row) { stamp = row.stamp; });
   }, 1000);
 
 }
@@ -396,7 +348,6 @@ function addCol(table,col,type, def) {
       info("Updating Table '"+table+"' : Adding Col '"+col+"' ("+type+")");
     }
   }  );
-
 }
 
 function writedb() {
@@ -408,6 +359,7 @@ function writedb() {
     stmt.run(args);
     stmt.finalize();
     //serverdb.run(query,args);
+    //
     //var statement = serverdb.prepare(arguments[0], for ( var i = 1; i < arguments.length; i++) { arguments[i] } );
   });
 
