@@ -14,7 +14,7 @@ var passwd;
 var stamp;
 var connected = false;
 
-  initDB();
+initDB();
 
 var client = new net.Socket();
 var line = "";
@@ -29,6 +29,12 @@ var chatLog = [];
 var repeatingTasks = [];
 var playerList = [];
 
+var coinPerZKill = 5.0;
+var coinPerMinute = 0.5;
+var coinPerDeath = -50.0;
+var coinPerPKill = -50.0;
+var currency = "zCoin"; 
+
 var reConnect = new doEvery('five seconds').on('hit', function() { if ( !connected) { tryConnect(); } }).on('restart', function() { info("Starting reconnect timer ..."); }).on('stop', function() { info("Stopping reconnect timer ..."); }).start();
 
 setupRepeatingTasks();
@@ -42,15 +48,15 @@ client.on('data', function(data) {
 
   if ( contains("Executing command") ||  contains("Adding observed") || contains("Removing observed") ) { }
   else
-    console.log('<'.red + line.reset + '<'.red);
+  console.log('<'.red + line.reset + '<'.red);
 
-  if ( line.match("Press 'exit'" ) ) {
-    connected = true;
-    console.log("Logged in!");
-    doLoginStuff();
-  } 
+if ( line.match("Press 'exit'" ) ) {
+  connected = true;
+  console.log("Logged in!");
+  doLoginStuff();
+} 
 
-  parseLine();
+parseLine();
 
 }).on('connect', function() {
 
@@ -99,6 +105,9 @@ function isCommand()
       case 'recent': showRecentChat(player); break;
       case 'sethome': sethome(player); break;
       case 'home': gohome(player); break;
+      case 'wallet':
+      case 'balance':
+      case 'bal': getCoins(player,true,0,0);break;
     }
 
     //TODO  Valid Command: Log it to Web Console
@@ -116,15 +125,58 @@ function isCustomCommand(cmd, player)
   return false;
 }
 
+function getCoins(player, show, add, sub) {
+  var steamid = playerList[player].steamid;
+
+  serverdb.get("SELECT * FROM player_info WHERE steamID='"+steamid+"';", function(err,row) {
+    if (err) {
+      error(row);
+    } else {
+      info(row);
+      var deaths = row.deaths;
+      var kills = row.zkills;
+      var pk = row.pkills
+      var spent = row.coins;
+
+    if ( spent == null || spent == "null" ) { spent = 0 };
+
+      var playtime = row.playtime;
+    
+      var zcoin = kills * coinPerZKill;
+      var pcoin = pk * coinPerPKill;
+      var timecoin = playtime * coinPerMinute;
+      var deathcoin = deaths * coinPerDeath;
+   
+      var bal = ( (kills * coinPerZKill) + (playtime * coinPerMinute) + (pk * coinPerPKill) + ( deaths * coinPerDeath) ) - spent;
+
+      if (show)
+        pm(player,"You have " + bal + " " + currency + ".");
+      if (add != 0) { // Add Coins
+        spent -= add;
+        writedb("UPDATE player_info SET coins=? WHERE steamID=?;",spent,steamid);
+      }
+      if (sub != 0) { // Remove Coins
+        spent += add;
+        writedb("UPDATE player_info SET coins=? WHERE steamID=?;",spent,steamid);
+      }
+
+    }
+  });
+}
+
+
+
 function sethome(player) {
   // TODO Cost STuff
 
-  var coords = playerList[player].pos;
+
+  var c = playerList[player].pos.split(",");
+  var coords = parseInt(c[0]) + " " + parseInt(c[1]) + " " + parseInt(c[2]);
   var steamid = playerList[player].steamid;
 
   writedb("UPDATE player_info SET home=? WHERE steamID='"+steamid+"';", coords);
 
-  pm(player,"Home set: " + coords);
+  pm(player,"Home set: " + niceCoords(coords,true) );
 }
 
 function gohome(player) {
@@ -145,7 +197,7 @@ function gohome(player) {
         pm(player,"You do not have a home set. Use /sethome to set it to your current location.");
         return;
       }
-  
+
       // TODO Cost Stuff
       // TODO Timer
       coords.replace(',','');
@@ -170,7 +222,11 @@ function showRecentChat(player) {
 }
 
 function pm(player, msg) {
-  send("pm " + player + " \"" + msg.replace(/\"/g, "'") + "\"");
+  send("pm " + player + " \"[006a4e]**[FFFFFF] " + msg.replace(/\"/g, "'") + "\"");
+}
+
+function say(msg) {
+  send("say " +  " \"[0070FF]**[FFFFFF] " + msg.replace(/\"/g, "'") + "\"");
 }
 
 function timeStamp() {
@@ -236,7 +292,7 @@ function parseLine() {
     for (var i = 0; i < out.length-1; i++ ) {
       if ( out[i].match("steamid")) { updatePlayerLPK(out[i]); }
     }
- }
+  }
 
   if ( contains("Spawning scouts") ) { // Announce Screamers
     line = line + "\n";
@@ -251,10 +307,32 @@ function parseLine() {
     for (var i = 0; i < out.length-1; i++ ) {
       if ( out[i].match("disconnected after")) {
         var out1 = out[i].substr(out[i].indexOf("INF Player")).split(" ");
-          delete playerList[out1[3]];
+        delete playerList[out1[3]];
       }
     }
   }
+
+  if ( contains("Computed flight paths for") ) { // Airdrop incoming
+    // TODO if Enabled
+    say("An airdrop is being prepared for travel! Look to the skies!");
+  }
+
+  if ( contains("AIAirDrop: Spawned supply crate") ) { // Actual Airdrop
+    line = line + "\n";
+    var out = line.split("\n");
+    for (var i = 0; i < out.length-1; i++ ) {
+      if ( out[i].match("Spawned supply crate")) { announceCrate(out[i]); }
+    }
+  }
+}
+
+function announceCrate(data) {
+  //2016-01-02T01:52:57 110218.875 INF AIAirDrop: Spawned supply crate @ ((-2254.1, 374.1, -6465.9))
+
+  // TODO If Enabled
+  data = data.substr(data.lastIndexOf("((")+2).split(")");
+  var loc1 = data[0];
+  say("The supply crate is heading towards " + niceCoords(loc1,false) + "!");
 }
 
 function announceScreamer(data) {
@@ -269,6 +347,19 @@ function announceScreamer(data) {
     if ( dist < 35 ) { pm(x,"[cc0000]WARNING: There is a Screamer heading in your direction!"); }
     info("Distance: " + x + " " +  dist );
   }
+}
+
+function niceCoords(loc,ele) {
+  var c = loc.replace(/,/,"").split(" ");
+  var z = parseInt(c[0]);
+  var y = parseInt(c[1]);
+  var x = parseInt(c[2]);
+
+  if ( x < 0 ){ x = (x+x+x) + "S"; } else { x = x + "N"; }
+  if ( z < 0 ){ z = (z+z+z) + "W"; } else { z = z + "E"; }
+
+
+  return x + "," + (ele ? " "+ y +"," : "") + " " + z;
 }
 
 function getDistance(l1, l2) {
@@ -312,7 +403,7 @@ function runRepeatingTasks(op) {
   for ( var x in repeatingTasks) {
     var val = repeatingTasks[x]; 
     if ( op == true ) { val.task.restart(); }
-  else { val.task.pause(); } 
+    else { val.task.pause(); } 
   }
 }
 
@@ -335,7 +426,7 @@ function updatePlayerLP(str) {
   //  out1[0] = position
   var out = str.split(",");
   var name = out[1].trim();
-  //  info(out2);
+ //   info(out2);
   writedb("INSERT OR IGNORE INTO player_info(steamID,name,online,position,zkills,pkills,score,level,ip,deaths) VALUES(?,?,?,?,?,?,?,?,?,?)",out2[15], name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
   writedb("UPDATE player_info SET name=?, online=?, position=?, zkills=?, pkills=?, score=?, level=?, ip=?, deaths=? WHERE steamID=?;", name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5], out2[15] );
 
@@ -352,8 +443,9 @@ function updatePlayerLPK(str) {
   var out = data.split(/=| /);
   var player = [ name, out[1], out[3], out[5], out[7], out[9], out[12] +" "+ out[13] ];
   // name,id,steamid,online,ip,playtime,seen year/time
-  writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip) VALUES(?,?,?,?,?)", player[2], player[0], player[1], player[3], player[4]);
-  writedb("UPDATE player_info SET name=?, plid=?, online=?, ip=? WHERE steamID=?;",player[0], player[1], player[3].match("True") ? true : false, player[4], player[2]);
+  //info(player);
+  writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip, playtime) VALUES(?,?,?,?,?,?)", player[2], player[0], player[1], player[3], player[4], player[5]);
+  writedb("UPDATE player_info SET name=?, plid=?, online=?, ip=?, playtime=? WHERE steamID=?;",player[0], player[1], player[3].match("True") ? true : false, player[4], player[5], player[2]);
 
   if ( name in playerList )
     playerList[name].steamid = player[2];
@@ -384,7 +476,8 @@ function initDB() {
 
 function updateDB() {
   addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
-  addTable("player_info", "steamID TEXT PRIMARY KEY, online BOOLEAN, position TEXT, name TEXT, zkills INTEGER, pkills INTEGER, score INTEGER, level INTEGER, ip TEXT, deaths INTEGER, coins DOUBLE, home TEXT, plid INTEGER");
+  addTable("player_info", "steamID TEXT PRIMARY KEY, online BOOLEAN, position TEXT, name TEXT, zkills INTEGER, pkills INTEGER, score INTEGER, level INTEGER, ip TEXT, deaths INTEGER, coins DOUBLE, home TEXT, plid INTEGER, playtime INTEGER");
+  addCol("player_info","playtime","INTEGER",0);
 }
 
 function addTable(table,data) {
@@ -417,6 +510,5 @@ function writedb() {
     //
     //var statement = serverdb.prepare(arguments[0], for ( var i = 1; i < arguments.length; i++) { arguments[i] } );
   });
-
 }
 
