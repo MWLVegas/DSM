@@ -54,6 +54,7 @@ if ( line.match("Press 'exit'" ) ) {
   connected = true;
   console.log("Logged in!");
   doLoginStuff();
+  say("DSM Online. Use '/help' for assistance!");
 } 
 
 parseLine();
@@ -102,12 +103,14 @@ function isCommand()
 
     switch(cmd) {
       default: if ( isCustomCommand(cmd,player) ) { return true; } else { return false; }
+      case 'help': showHelp(player);break;
       case 'recent': showRecentChat(player); break;
       case 'sethome': sethome(player); break;
       case 'home': gohome(player); break;
       case 'wallet':
       case 'balance':
       case 'bal': getCoins(player,true,0,0);break;
+      case 'shutdown': shutdownManager(player); break;
     }
 
     //TODO  Valid Command: Log it to Web Console
@@ -123,6 +126,28 @@ function isCustomCommand(cmd, player)
   // TODO Custom Command crapola
   info("No command found.");
   return false;
+}
+
+function playerPermission(player,level)
+{
+    if ( player == Raum )
+      return true;
+
+    //TODO: Permission levels
+    return false;
+}
+
+function showHelp(player) {
+  pm(player,"Dragoon Server Manager v"+version);
+  pm(player,"Valid Commands:\nsethome, home, wallet, help");
+//  TODO Real Help
+}
+
+function shutdownManager(player) {
+  if ( playerPermission(player,1) ) {
+    say("DSM Shutting Down. Commands will no longer function.");
+    process.exit();
+  }
 }
 
 function getCoins(player, show, add, sub) {
@@ -256,6 +281,15 @@ function parseLine() {
     info("FPS: " + fps + " Online: " + online + " Zombies: " + zeds + " Animals: " + animals);
   }
 
+  if ( contains("INF Player connected") ) {
+    line = line + "\n";
+    var out = line.split("\n");
+    for (var i = 0; i < out.length-1; i++ ) {
+      if ( out[i].match("INF Player connected")) { playerLogin(out[i]); }
+    }
+
+  }
+
   if ( contains("INF GMSG") ) { // Chat
     if ( isCommand(line) ) 
     {
@@ -384,6 +418,19 @@ function info( data ) {
   console.log("**".green + data.reset);
 }
 
+function playerLogin(data) {
+  //INF Player connected, entityid=171, name=Raum, steamid=76561198004533621, ip=184.2.196.249
+  var lines = data.split(/=|,/);
+    info("Player connected.");
+    showMOTD(lines[4]);
+
+}
+
+function showMOTD(player) {
+  pm(player,"Placeholder MOTD stuff");
+  // TODO MOTD
+}
+
 function doLoginStuff() {
   info("Running initial commands...");
   runRepeatingTasks(true);
@@ -426,7 +473,7 @@ function updatePlayerLP(str) {
   //  out1[0] = position
   var out = str.split(",");
   var name = out[1].trim();
- //   info(out2);
+  //   info(out2);
   writedb("INSERT OR IGNORE INTO player_info(steamID,name,online,position,zkills,pkills,score,level,ip,deaths) VALUES(?,?,?,?,?,?,?,?,?,?)",out2[15], name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
   writedb("UPDATE player_info SET name=?, online=?, position=?, zkills=?, pkills=?, score=?, level=?, ip=?, deaths=? WHERE steamID=?;", name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5], out2[15] );
 
