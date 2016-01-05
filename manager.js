@@ -17,7 +17,6 @@ var connected = false;
 initDB();
 
 var client = new net.Socket();
-var line = "";
 var online = 0;
 var admins = 0;
 var zeds = 0;
@@ -27,8 +26,8 @@ var fps = 0;
 var day = 0;
 var chatLog = [];
 var repeatingTasks = [];
-var playerList = [];
-
+var playerList = {};
+var input = [];
 var coinPerZKill = 5.0;
 var coinPerMinute = 0.5;
 var coinPerDeath = -50.0;
@@ -38,27 +37,32 @@ var currency = "zCoin";
 var reConnect = new doEvery('five seconds').on('hit', function() { if ( !connected) { tryConnect(); } }).on('restart', function() { info("Starting reconnect timer ..."); }).on('stop', function() { info("Stopping reconnect timer ..."); }).start();
 
 setupRepeatingTasks();
+var processInputTimer = setInterval( function() { processInput(); }, 100 );
 
 client.on('data', function(data) {
-  line = data.toString().trim();
+  var lines = data.toString().trim().split(/\n\r|\r\n|\n|\r/);
 
-  if ( line.length <= 1 ) {
-    return;
+  for ( var x in lines )  {
+    var line = lines[x];
+
+    if ( line.length <= 1 ) {
+      continue;
+    }
+
+    input.push(line);
+
+    if ( line.match("Executing command") ||  line.match("Adding observed") || line.match("Removing observed") ) { }
+    else
+      console.log('<'.red + line.reset + '<'.red);
+
+    if ( line.match("Press 'exit'" ) ) {
+      connected = true;
+      console.log("Logged in!");
+      doLoginStuff();
+      //  say("DSM Online. Use '/help' for assistance!");
+    } 
+
   }
-
-  if ( contains("Executing command") ||  contains("Adding observed") || contains("Removing observed") ) { }
-  else
-  console.log('<'.red + line.reset + '<'.red);
-
-if ( line.match("Press 'exit'" ) ) {
-  connected = true;
-  console.log("Logged in!");
-  doLoginStuff();
-  say("DSM Online. Use '/help' for assistance!");
-} 
-
-parseLine();
-
 }).on('connect', function() {
 
   console.log('Connection Success!\nSending password ...\n');
@@ -80,27 +84,38 @@ process.stdin.on('data',function(chunk){ // Pipe STDIN to Socket.out
   send(chunk.toString() );
 });
 
-function contains(data) {
-  if ( line.match(data) ) {
-    return true;
-  }
-  return false;
-}
-
 function send(data) {
   client.write(data.toString().trim() + "\n");
   console.log( colors.magenta(">") + data.toString().trim().reset+ colors.magenta("<") );
 }
 
-function isCommand()
-{
-  var input = line.substr(line.indexOf("INF GMSG:")+10).split(" ");
-  if ( input[1].startsWith("/") )
-  {
-    info("Attempted Command: " + input[1] + " from " + input[0] );
-    var cmd = input[1].substring(1);
-    var player = input[0].substring(0,input[0].length-1);
+function showPlayerList(player) {
+  if ( !playerPermission(player,1) )
+    return;
 
+  for ( var x in playerList )
+  {
+    pm(player,"Key: " + x);
+    var value = playerList[x];
+    for (var y in value ) {
+      pm(player,"-- " + y + ": "+value[y]);
+    }
+  }
+}
+
+function isCommand(line)
+{
+  var inp = line.substr(line.indexOf("INF GMSG:")).split(":");
+  if ( !inp[2] )
+    return false;
+  var player = inp[1].trim();
+  
+//  .split(" ");
+  if ( inp[2].trim().startsWith("/") )
+  {
+  var cmd = inp[2].trim().substr(1);
+
+    info("Attempted Command: " + cmd + " from " + player );
     switch(cmd) {
       default: if ( isCustomCommand(cmd,player) ) { return true; } else { return false; }
       case 'help': showHelp(player);break;
@@ -111,6 +126,8 @@ function isCommand()
       case 'balance':
       case 'bal': getCoins(player,true,0,0);break;
       case 'shutdown': shutdownManager(player); break;
+      case 'plist': showPlayerList(player);
+      case 'coords': coords = playerList[player].pos; pm(player,"Coords: " + coords + " : Nice Coords: " + niceCoords(coords,true)); break;
     }
 
     //TODO  Valid Command: Log it to Web Console
@@ -130,17 +147,17 @@ function isCustomCommand(cmd, player)
 
 function playerPermission(player,level)
 {
-    if ( player == Raum )
-      return true;
+  if ( player == 'Raum' )
+    return true;
 
-    //TODO: Permission levels
-    return false;
+  //TODO: Permission levels
+  return false;
 }
 
 function showHelp(player) {
   pm(player,"Dragoon Server Manager v"+version);
   pm(player,"Valid Commands:\nsethome, home, wallet, help");
-//  TODO Real Help
+  //  TODO Real Help
 }
 
 function shutdownManager(player) {
@@ -161,29 +178,29 @@ function getCoins(player, show, add, sub) {
       var deaths = row.deaths;
       var kills = row.zkills;
       var pk = row.pkills
-      var spent = row.coins;
+    var spent = row.coins;
 
-    if ( spent == null || spent == "null" ) { spent = 0 };
+  if ( spent == null || spent == "null" ) { spent = 0 };
 
-      var playtime = row.playtime;
-    
-      var zcoin = kills * coinPerZKill;
-      var pcoin = pk * coinPerPKill;
-      var timecoin = playtime * coinPerMinute;
-      var deathcoin = deaths * coinPerDeath;
-   
-      var bal = ( (kills * coinPerZKill) + (playtime * coinPerMinute) + (pk * coinPerPKill) + ( deaths * coinPerDeath) ) - spent;
+  var playtime = row.playtime;
 
-      if (show)
-        pm(player,"You have " + bal + " " + currency + ".");
-      if (add != 0) { // Add Coins
-        spent -= add;
-        writedb("UPDATE player_info SET coins=? WHERE steamID=?;",spent,steamid);
-      }
-      if (sub != 0) { // Remove Coins
-        spent += add;
-        writedb("UPDATE player_info SET coins=? WHERE steamID=?;",spent,steamid);
-      }
+  var zcoin = kills * coinPerZKill;
+  var pcoin = pk * coinPerPKill;
+  var timecoin = playtime * coinPerMinute;
+  var deathcoin = deaths * coinPerDeath;
+
+  var bal = ( (kills * coinPerZKill) + (playtime * coinPerMinute) + (pk * coinPerPKill) + ( deaths * coinPerDeath) ) - spent;
+
+  if (show)
+    pm(player,"You have " + bal + " " + currency + ".");
+  if (add != 0) { // Add Coins
+    spent -= add;
+    writedb("UPDATE player_info SET coins=? WHERE steamID=?;",spent,steamid);
+  }
+  if (sub != 0) { // Remove Coins
+    spent += add;
+    writedb("UPDATE player_info SET coins=? WHERE steamID=?;",spent,steamid);
+  }
 
     }
   });
@@ -193,7 +210,6 @@ function getCoins(player, show, add, sub) {
 
 function sethome(player) {
   // TODO Cost STuff
-
 
   var c = playerList[player].pos.split(",");
   var coords = parseInt(c[0]) + " " + parseInt(c[1]) + " " + parseInt(c[2]);
@@ -216,9 +232,9 @@ function gohome(player) {
       error(row);
     } else {
       info(row); 
-      var coords = row.home ;
+      var coords = row.home;
       info("COORDS: " + coords + " :: " + steamid);
-      if ( coords.trim().length <= 1 ) {
+    if ( !coords || coords == null || coords.trim().length <= 1 ) {
         pm(player,"You do not have a home set. Use /sethome to set it to your current location.");
         return;
       }
@@ -270,9 +286,20 @@ function timeStamp() {
   });i
 }
 
-function parseLine() {
+function processInput() {
 
-  if ( contains("INF Time" ) ) { // Mem 
+  if ( input.length == 0 )
+    return;
+
+  var line = input[0];
+  input.splice(0,1);
+  parseLine(line);
+
+}
+
+function parseLine(line) {
+
+  if ( line.match("INF Time" ) ) { // Mem 
     var out = line.split(" ");
     fps = parseInt(out[out.length-20]);
     online = parseInt(out[out.length-10]);
@@ -281,83 +308,59 @@ function parseLine() {
     info("FPS: " + fps + " Online: " + online + " Zombies: " + zeds + " Animals: " + animals);
   }
 
-  if ( contains("INF Player connected") ) {
-    line = line + "\n";
-    var out = line.split("\n");
-    for (var i = 0; i < out.length-1; i++ ) {
-      if ( out[i].match("INF Player connected")) { playerLogin(out[i]); }
-    }
-
+  if ( line.match("INF Player connected") ) {
+    playerLogin(line);
   }
 
-  if ( contains("INF GMSG") ) { // Chat
-    if ( isCommand(line) ) 
-    {
-      // Run command stuff
-      return;
-    }
-    // Store last few messages
-    chatLog.unshift( timeStamp() + " " + line.substr(line.indexOf("INF GMSG:")+10) );
-    if (chatLog.length >= 11) { // keep the saved log short
-      chatLog.pop();
-    }
-    //TODO Output to web console
-  }
-
-  if ( contains("INF Spawned") ) { // Catch time
-    var out = line.split(" ");
-    var found = parseInt(out[out.length-3].substring(4));
-    if ( found != day ) { // New Day
-      info("New day: " + found);
-      day = found;
-    }
-  }
-
-  if ( contains("steamid") && contains ("score") ) { // LP
-    var out = line.split("\n");
-    for (var i = 0; i < out.length-1; i++ ) {
-      if ( out[i].match("steamid")) { updatePlayerLP(out[i]); }
-    }
-  }
-
-  if ( contains("steamid") && contains("playtime") ) // LKP
+if ( line.match("INF GMSG") ) { // Chat
+  if ( isCommand(line) ) 
   {
-    var out = line.split("\n");
-    for (var i = 0; i < out.length-1; i++ ) {
-      if ( out[i].match("steamid")) { updatePlayerLPK(out[i]); }
-    }
+    // Run command stuff
+    return;
   }
+  // Store last few messages
+  chatLog.unshift( timeStamp() + " " + line.substr(line.indexOf("INF GMSG:")+10) );
+  if (chatLog.length >= 11) { // keep the saved log short
+    chatLog.pop();
+  }
+  //TODO Output to web console
+}
 
-  if ( contains("Spawning scouts") ) { // Announce Screamers
-    line = line + "\n";
-    var out = line.split("\n");
-    for (var i = 0; i < out.length-1; i++ ) {
-      if ( out[i].match("Spawning scouts")) { announceScreamer(out[i]); }
-    }
+if ( line.match("INF Spawned") ) { // Catch time
+  var out = line.split(" ");
+  var found = parseInt(out[out.length-3].substring(4));
+  if ( found != day ) { // New Day
+    info("New day: " + found);
+    day = found;
   }
+}
 
-  if ( contains("disconnected after") && contains("INF Player") )  { // Disconnects
-    var out = line.split("\n");
-    for (var i = 0; i < out.length-1; i++ ) {
-      if ( out[i].match("disconnected after")) {
-        var out1 = out[i].substr(out[i].indexOf("INF Player")).split(" ");
-        delete playerList[out1[3]];
-      }
-    }
-  }
+if ( line.match("steamid") && line.match("score") ) { // LP
+  updatePlayerLP(line);
+}
 
-  if ( contains("Computed flight paths for") ) { // Airdrop incoming
-    // TODO if Enabled
-    say("An airdrop is being prepared for travel! Look to the skies!");
-  }
+if ( line.match("steamid") && line.match("playtime") ) // LKP
+{
+  updatePlayerLPK(line);
+}
 
-  if ( contains("AIAirDrop: Spawned supply crate") ) { // Actual Airdrop
-    line = line + "\n";
-    var out = line.split("\n");
-    for (var i = 0; i < out.length-1; i++ ) {
-      if ( out[i].match("Spawned supply crate")) { announceCrate(out[i]); }
-    }
-  }
+if ( line.match("Spawning scouts") ) { // Announce Screamers
+  announceScreamer(line);
+}
+
+if ( line.match("disconnected after") && line.match("INF Player") )  { // Disconnects
+  var out1 = line.substr(line.indexOf("INF Player")).split(" ");
+  delete playerList[out1[3]];
+}
+
+if ( line.match("Computed flight paths for") ) { // Airdrop incoming
+  // TODO if Enabled
+  say("An airdrop is being prepared for travel! Look to the skies!");
+}
+
+if ( line.match("AIAirDrop: Spawned supply crate") ) { // Actual Airdrop
+  announceCrate(line);
+}
 }
 
 function announceCrate(data) {
@@ -388,9 +391,10 @@ function niceCoords(loc,ele) {
   var z = parseInt(c[0]);
   var y = parseInt(c[1]);
   var x = parseInt(c[2]);
+  info(c);
 
-  if ( x < 0 ){ x = (x+x+x) + "S"; } else { x = x + "N"; }
-  if ( z < 0 ){ z = (z+z+z) + "W"; } else { z = z + "E"; }
+  if ( x < 0 ){ x = Math.abs(x) + "S"; } else { x = x + "N"; }
+  if ( z < 0 ){ z = Math.abs(z) + "W"; } else { z = z + "E"; }
 
 
   return x + "," + (ele ? " "+ y +"," : "") + " " + z;
@@ -421,8 +425,8 @@ function info( data ) {
 function playerLogin(data) {
   //INF Player connected, entityid=171, name=Raum, steamid=76561198004533621, ip=184.2.196.249
   var lines = data.split(/=|,/);
-    info("Player connected.");
-    showMOTD(lines[4]);
+  info("Player connected.");
+  showMOTD(lines[4]);
 
 }
 
