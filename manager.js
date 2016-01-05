@@ -7,14 +7,14 @@ var fs = require('fs');
 if ( !fs.existsSync("./db")) { fs.mkdirSync("./db"); }
 var sqlite3 = require('sqlite3').verbose();
 var serverdb;
-var serverid = 1;
+
+var serverid = 0;
 var port;
 var host;
 var passwd;
+
 var stamp;
 var connected = false;
-
-initDB();
 
 var client = new net.Socket();
 var online = 0;
@@ -33,9 +33,27 @@ var coinPerMinute = 0.5;
 var coinPerDeath = -50.0;
 var coinPerPKill = -50.0;
 var currency = "zCoin"; 
+var forced = false;
 
 var reConnect = new doEvery('five seconds').on('hit', function() { if ( !connected) { tryConnect(); } }).on('restart', function() { info("Starting reconnect timer ..."); }).on('stop', function() { info("Stopping reconnect timer ..."); }).start();
 
+var args = process.argv.slice(2);
+args.forEach( function (val,index,array) {
+//  console.log(index + ': ' + val);
+  if ( val.startsWith("-h:") ) { host = val.substr(3); forced = true; }
+  if ( val.startsWith("-p:") ) { port = val.substr(3); forced = true; }
+  if ( val.startsWith("-pw:") ) { passwd = val.substr(4); forced = true; }
+  if ( val.startsWith("-i:" )) { serverid = val.substr(3);}
+});
+
+
+
+if ( serverid == 0 ) {
+  info("You must provide a serverid with -i:(id)");
+  process.exit();
+}
+
+initDB();
 setupRepeatingTasks();
 var processInputTimer = setInterval( function() { processInput(); }, 100 );
 
@@ -53,16 +71,16 @@ client.on('data', function(data) {
 
     if ( line.match("Executing command") ||  line.match("Adding observed") || line.match("Removing observed") ) { }
     else
-      console.log('<'.red + line.reset + '<'.red);
+  console.log('<'.red + line.reset + '<'.red);
 
-    if ( line.match("Press 'exit'" ) ) {
-      connected = true;
-      console.log("Logged in!");
-      doLoginStuff();
-      //  say("DSM Online. Use '/help' for assistance!");
-    } 
+if ( line.match("Press 'exit'" ) ) {
+  connected = true;
+  console.log("Logged in!");
+  doLoginStuff();
+  //  say("DSM Online. Use '/help' for assistance!");
+} 
 
-  }
+}
 }).on('connect', function() {
 
   console.log('Connection Success!\nSending password ...\n');
@@ -109,11 +127,11 @@ function isCommand(line)
   if ( !inp[2] )
     return false;
   var player = inp[1].trim();
-  
-//  .split(" ");
+
+  //  .split(" ");
   if ( inp[2].trim().startsWith("/") )
   {
-  var cmd = inp[2].trim().substr(1);
+    var cmd = inp[2].trim().substr(1);
 
     info("Attempted Command: " + cmd + " from " + player );
     switch(cmd) {
@@ -234,7 +252,7 @@ function gohome(player) {
       info(row); 
       var coords = row.home;
       info("COORDS: " + coords + " :: " + steamid);
-    if ( !coords || coords == null || coords.trim().length <= 1 ) {
+      if ( !coords || coords == null || coords.trim().length <= 1 ) {
         pm(player,"You do not have a home set. Use /sethome to set it to your current location.");
         return;
       }
@@ -312,55 +330,55 @@ function parseLine(line) {
     playerLogin(line);
   }
 
-if ( line.match("INF GMSG") ) { // Chat
-  if ( isCommand(line) ) 
+  if ( line.match("INF GMSG") ) { // Chat
+    if ( isCommand(line) ) 
+    {
+      // Run command stuff
+      return;
+    }
+    // Store last few messages
+    chatLog.unshift( timeStamp() + " " + line.substr(line.indexOf("INF GMSG:")+10) );
+    if (chatLog.length >= 11) { // keep the saved log short
+      chatLog.pop();
+    }
+    //TODO Output to web console
+  }
+
+  if ( line.match("INF Spawned") ) { // Catch time
+    var out = line.split(" ");
+    var found = parseInt(out[out.length-3].substring(4));
+    if ( found != day ) { // New Day
+      info("New day: " + found);
+      day = found;
+    }
+  }
+
+  if ( line.match("steamid") && line.match("score") ) { // LP
+    updatePlayerLP(line);
+  }
+
+  if ( line.match("steamid") && line.match("playtime") ) // LKP
   {
-    // Run command stuff
-    return;
+    updatePlayerLPK(line);
   }
-  // Store last few messages
-  chatLog.unshift( timeStamp() + " " + line.substr(line.indexOf("INF GMSG:")+10) );
-  if (chatLog.length >= 11) { // keep the saved log short
-    chatLog.pop();
+
+  if ( line.match("Spawning scouts") ) { // Announce Screamers
+    announceScreamer(line);
   }
-  //TODO Output to web console
-}
 
-if ( line.match("INF Spawned") ) { // Catch time
-  var out = line.split(" ");
-  var found = parseInt(out[out.length-3].substring(4));
-  if ( found != day ) { // New Day
-    info("New day: " + found);
-    day = found;
+  if ( line.match("disconnected after") && line.match("INF Player") )  { // Disconnects
+    var out1 = line.substr(line.indexOf("INF Player")).split(" ");
+    delete playerList[out1[3]];
   }
-}
 
-if ( line.match("steamid") && line.match("score") ) { // LP
-  updatePlayerLP(line);
-}
+  if ( line.match("Computed flight paths for") ) { // Airdrop incoming
+    // TODO if Enabled
+    say("An airdrop is being prepared for travel! Look to the skies!");
+  }
 
-if ( line.match("steamid") && line.match("playtime") ) // LKP
-{
-  updatePlayerLPK(line);
-}
-
-if ( line.match("Spawning scouts") ) { // Announce Screamers
-  announceScreamer(line);
-}
-
-if ( line.match("disconnected after") && line.match("INF Player") )  { // Disconnects
-  var out1 = line.substr(line.indexOf("INF Player")).split(" ");
-  delete playerList[out1[3]];
-}
-
-if ( line.match("Computed flight paths for") ) { // Airdrop incoming
-  // TODO if Enabled
-  say("An airdrop is being prepared for travel! Look to the skies!");
-}
-
-if ( line.match("AIAirDrop: Spawned supply crate") ) { // Actual Airdrop
-  announceCrate(line);
-}
+  if ( line.match("AIAirDrop: Spawned supply crate") ) { // Actual Airdrop
+    announceCrate(line);
+  }
 }
 
 function announceCrate(data) {
@@ -506,6 +524,11 @@ function initDB() {
   var newserver = false;
 
   if ( !fs.existsSync("./db/"+serverid+".sqlite")) {  // Server DB doesn't Exist
+    if ( !host || !passwd || !port )     {
+      info("You must use all arguments for the first run.");
+      process.exit();
+    }
+
     info("Server DB doesn't exist. Creating ...");
     newserver = true;
   }
@@ -514,13 +537,21 @@ function initDB() {
 
   if ( newserver ) { // Create new server database crap
     serverdb.run("CREATE TABLE server_info ( host TEXT, port INTEGER, pass TEXT ) ");
-    writedb("INSERT INTO server_info (host,port,pass) VALUES(?,?,?)", "web.stuzzcraft.org", 8098, "RandomTestPassword");
+    writedb("INSERT INTO server_info (host,port,pass) VALUES(?,?,?)", host,port,passwd); //"web.stuzzcraft.org", 8098, "RandomTestPassword");
   }
 
   updateDB();
 
   setTimeout( function() { 
-    serverdb.get("SELECT * FROM server_info;", function(err,row) { host = row.host; port = row.port, passwd = row.pass, stamp = row.stamp; info("Host: " + host + "\nPort: " + port); });
+    if ( !forced ) {
+
+    serverdb.get("SELECT * FROM server_info;", function(err,row) { if ( err ) { info("No valid host, port and password found."); process.exit(); } host = row.host; port = row.port, passwd = row.pass, stamp = row.stamp; info("Host: " + host + "\nPort: " + port); });
+    }
+    else {
+      info("Using Input");
+      info("Host: " + host );
+      info ("Port: " + port );
+    }
   }, 1000);
 
 }
