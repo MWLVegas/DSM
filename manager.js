@@ -34,12 +34,13 @@ var coinPerDeath = -50.0;
 var coinPerPKill = -50.0;
 var currency = "zCoin"; 
 var forced = false;
+var quiet = false;
 
-var reConnect = new doEvery('five seconds').on('hit', function() { if ( !connected) { tryConnect(); } }).on('restart', function() { info("Starting reconnect timer ..."); }).on('stop', function() { info("Stopping reconnect timer ..."); }).start();
+var reConnect = new doEvery('five seconds').on('hit', function() { if ( !connected) { tryConnect(); } }).on('restart', function() { info("Starting reconnect timer ...".green); }).on('stop', function() { info("Stopping reconnect timer ...".green); }).start();
 
 var args = process.argv.slice(2);
 args.forEach( function (val,index,array) {
-//  console.log(index + ': ' + val);
+  //  console.log(index + ': ' + val);
   if ( val.startsWith("-h:") ) { host = val.substr(3); forced = true; }
   if ( val.startsWith("-p:") ) { port = val.substr(3); forced = true; }
   if ( val.startsWith("-pw:") ) { passwd = val.substr(4); forced = true; }
@@ -50,7 +51,6 @@ if ( serverid == 0 ) {
   info("You must provide a serverid with -i:(id)");
   process.exit();
 }
-
 
 initDB();
 setupRepeatingTasks();
@@ -65,12 +65,13 @@ client.on('data', function(data) {
     if ( line.length <= 1 ) {
       continue;
     }
-
     input.push(line);
-
     if ( line.match("Executing command") ||  line.match("Adding observed") || line.match("Removing observed") ) { }
-    else
-  console.log('<'.red + line.reset + '<'.red);
+    else {
+      if (!quiet) {
+        console.log('<'.red + line.reset + '<'.red);
+      }
+    }
 
 if ( line.match("Press 'exit'" ) ) {
   connected = true;
@@ -81,15 +82,14 @@ if ( line.match("Press 'exit'" ) ) {
 
 }
 }).on('connect', function() {
-
   console.log('Connection Success!\nSending password ...\n');
   send(passwd,0);
 }).on('end', function() {
-  console.log('Disconnected');
+  console.log('Disconnected. Game crash?');
   runRepeatingTasks(false);
   connected = false;
 }).on('error', function() {
-  info("Connection refused.");
+  info("Connection refused. Check your settings.");
   connected = false;
 });
 
@@ -102,8 +102,21 @@ process.stdin.on('data',function(chunk){ // Pipe STDIN to Socket.out
 });
 
 function send(data) {
+  if ( data.startsWith("/") ) {
+    var inp = data.trim().split(" ");
+    var cmd = inp[0].substr(1);
+
+    switch( cmd )
+    {
+      default: break;
+      case "quiet": quiet = !quiet; info("Console logging: " + !quiet ); return;
+    }
+
+  }
   client.write(data.toString().trim() + "\n");
-  console.log( colors.magenta(">") + data.toString().trim().reset+ colors.magenta("<") );
+  if ( !quiet) { 
+  console.log( colors.yellow(">") + data.toString().trim().reset+ colors.yellow(">") );
+  }
 }
 
 function showPlayerList(player) {
@@ -127,7 +140,6 @@ function isCommand(line)
     return false;
   var player = inp[1].trim();
 
-  //  .split(" ");
   if ( inp[2].trim().startsWith("/") )
   {
     var cmd = inp[2].trim().substr(1);
@@ -300,18 +312,16 @@ function timeStamp() {
       default: return m.slice (1); 
     }
     return ('0' + m).slice (-2);
-  });i
+  });
 }
 
 function processInput() {
-
   if ( input.length == 0 )
     return;
 
   var line = input[0];
   input.splice(0,1);
   parseLine(line);
-
 }
 
 function parseLine(line) {
@@ -390,16 +400,18 @@ function announceCrate(data) {
 }
 
 function announceScreamer(data) {
+
+  // TODO if Enabled
   //  AIDirector: Spawning scouts @ ((4688.0, 163.0, 1528.0)) heading towards ((4619.0, 179.0, 1614.0))<<<
   data = data.substr(data.lastIndexOf("((")+2).split(")");
   var loc1 = data[0];
-  info( "Screamer Spawn: " + loc1);
+  //info( "Screamer Spawn: " + loc1);
   for ( var x in playerList )
   {
     var loc2 = playerList[x].pos;
     var dist = getDistance(loc1,loc2);
     if ( dist < 35 ) { pm(x,"[cc0000]WARNING: There is a Screamer heading in your direction!"); }
-    info("Distance: " + x + " " +  dist );
+    //info("Distance: " + x + " " +  dist );
   }
 }
 
@@ -448,8 +460,14 @@ function playerLogin(data) {
 }
 
 function showMOTD(player) {
-  pm(player,"Placeholder MOTD stuff");
-  // TODO MOTD
+  var steamid = playerList[player].steamid;
+  serverdb.get("SELECT motd FROM server_info;", function(err,row) {
+    if (err) {
+      error(row);
+    } else {
+      pm(player,row.motd);
+    }
+  });
 }
 
 function doLoginStuff() {
@@ -467,7 +485,7 @@ function repeat(timer, func, named) {
 }
 
 function runRepeatingTasks(op) {
-  info(colors.yellow("Repeating tasks " + (op ? "starting." : "pausing.")));
+  info(colors.green("Repeating tasks " + (op ? "starting." : "pausing.")));
   for ( var x in repeatingTasks) {
     var val = repeatingTasks[x]; 
     if ( op == true ) { val.task.restart(); }
@@ -494,8 +512,7 @@ function updatePlayerLP(str) {
   //  out1[0] = position
   var out = str.split(",");
   var name = out[1].trim();
-  //   info(out2);
-  writedb("INSERT OR IGNORE INTO player_info(steamID,name,online,position,zkills,pkills,score,level,ip,deaths) VALUES(?,?,?,?,?,?,?,?,?,?)",out2[15], name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
+  writedb("INSERT OR IGNORE INTO player_info(steamID,name,online,position,zkills,pkills,score,level,ip,deaths,level) VALUES(?,?,?,?,?,?,?,?,?,?,0)",out2[15], name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5]);
   writedb("UPDATE player_info SET name=?, online=?, position=?, zkills=?, pkills=?, score=?, level=?, ip=?, deaths=? WHERE steamID=?;", name, true, out1[0], out2[7], out2[9], out2[11], out2[13],out2[17],out2[5], out2[15] );
 
   if ( name in playerList ) 
@@ -511,8 +528,7 @@ function updatePlayerLPK(str) {
   var out = data.split(/=| /);
   var player = [ name, out[1], out[3], out[5], out[7], out[9], out[12] +" "+ out[13] ];
   // name,id,steamid,online,ip,playtime,seen year/time
-  //info(player);
-  writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip, playtime) VALUES(?,?,?,?,?,?)", player[2], player[0], player[1], player[3], player[4], player[5]);
+  writedb("INSERT OR IGNORE INTO player_info(steamID, name, plid, online, ip, playtime, level) VALUES(?,?,?,?,?,?,0)", player[2], player[0], player[1], player[3], player[4], player[5]);
   writedb("UPDATE player_info SET name=?, plid=?, online=?, ip=?, playtime=? WHERE steamID=?;",player[0], player[1], player[3].match("True") ? true : false, player[4], player[5], player[2]);
 
   if ( name in playerList )
@@ -524,7 +540,7 @@ function initDB() {
 
   if ( !fs.existsSync("./db/"+serverid+".sqlite")) {  // Server DB doesn't Exist
     if ( !host || !passwd || !port )     {
-      info("You must use all arguments for the first run.");
+      info("All arguments are required for first run.");
       process.exit();
     }
 
@@ -536,32 +552,36 @@ function initDB() {
 
   if ( newserver ) { // Create new server database crap
     serverdb.run("CREATE TABLE server_info ( host TEXT, port INTEGER, pass TEXT ) ");
-    writedb("INSERT INTO server_info (host,port,pass) VALUES(?,?,?)", host,port,passwd); //"web.stuzzcraft.org", 8098, "RandomTestPassword");
+    writedb("INSERT INTO server_info (host,port,pass) VALUES(?,?,?)", host,port,passwd);
   }
 
   updateDB();
 
   setTimeout( function() { 
     if ( newserver ) { // New Server - Restart to get rid of args
-    info("New server set up.");
+      info("New server set up.");
     }
 
     if ( !forced ) {
-    serverdb.get("SELECT * FROM server_info;", function(err,row) { if ( err ) { info("No valid host, port and password found."); process.exit(); } host = row.host; port = row.port, passwd = row.pass, stamp = row.stamp; info("Host: " + host + "\nPort: " + port); });
+      serverdb.get("SELECT * FROM server_info;", function(err,row) { if ( err ) { info("No valid host, port and password found."); process.exit(); } host = row.host; port = row.port, passwd = row.pass, stamp = row.stamp; info("Host: " + host + "\nPort: " + port); });
     }
     else {
       writedb("UPDATE server_info SET host=?,port=?,pass=?",host,port,passwd);
-      info("Updating DB with New Info. Restarting");
+      info("Updating DB with New Info.");
     }
   }, 1000);
 
 }
 
 function updateDB() {
-  addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
-  addTable("player_info", "steamID TEXT PRIMARY KEY, online BOOLEAN, position TEXT, name TEXT, zkills INTEGER, pkills INTEGER, score INTEGER, level INTEGER, ip TEXT, deaths INTEGER, coins DOUBLE, home TEXT, plid INTEGER, playtime INTEGER");
-  addCol("player_info","playtime","INTEGER",0);
+
+  addTable("player_info", "steamID TEXT PRIMARY KEY, online BOOLEAN, position TEXT, name TEXT, zkills INTEGER, pkills INTEGER, score INTEGER, level INTEGER, ip TEXT, deaths INTEGER, coins DOUBLE, home TEXT, plid INTEGER, playtime INTEGER, level INTEGER");
   addTable("gate_info", "owner TEXT, coords TEXT, public BOOLEAN, label TEXT");
+
+  addCol("server_info","motd","TEXT","Message of the day!" );
+  addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
+  addCol("player_info","playtime","INTEGER",0);
+  addCol("player_info", "level","INTEGER",0);
 }
 
 function addTable(table,data) {
@@ -582,8 +602,6 @@ function addCol(table,col,type, def) {
       }
     }  );
   }, 500);
-
-
 }
 
 function writedb() {
@@ -594,9 +612,6 @@ function writedb() {
     var stmt = serverdb.prepare(query);
     stmt.run(args);
     stmt.finalize();
-    //serverdb.run(query,args);
-    //
-    //var statement = serverdb.prepare(arguments[0], for ( var i = 1; i < arguments.length; i++) { arguments[i] } );
   });
 }
 
