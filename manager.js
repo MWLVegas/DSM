@@ -46,12 +46,11 @@ args.forEach( function (val,index,array) {
   if ( val.startsWith("-i:" )) { serverid = val.substr(3);}
 });
 
-
-
 if ( serverid == 0 ) {
   info("You must provide a serverid with -i:(id)");
   process.exit();
 }
+
 
 initDB();
 setupRepeatingTasks();
@@ -543,14 +542,16 @@ function initDB() {
   updateDB();
 
   setTimeout( function() { 
-    if ( !forced ) {
+    if ( newserver ) { // New Server - Restart to get rid of args
+    info("New server set up.");
+    }
 
+    if ( !forced ) {
     serverdb.get("SELECT * FROM server_info;", function(err,row) { if ( err ) { info("No valid host, port and password found."); process.exit(); } host = row.host; port = row.port, passwd = row.pass, stamp = row.stamp; info("Host: " + host + "\nPort: " + port); });
     }
     else {
-      info("Using Input");
-      info("Host: " + host );
-      info ("Port: " + port );
+      writedb("UPDATE server_info SET host=?,port=?,pass=?",host,port,passwd);
+      info("Updating DB with New Info. Restarting");
     }
   }, 1000);
 
@@ -560,6 +561,7 @@ function updateDB() {
   addCol("server_info","stamp","TEXT", "[c01155]%H:%M:%S[FFFFFF]" );
   addTable("player_info", "steamID TEXT PRIMARY KEY, online BOOLEAN, position TEXT, name TEXT, zkills INTEGER, pkills INTEGER, score INTEGER, level INTEGER, ip TEXT, deaths INTEGER, coins DOUBLE, home TEXT, plid INTEGER, playtime INTEGER");
   addCol("player_info","playtime","INTEGER",0);
+  addTable("gate_info", "owner TEXT, coords TEXT, public BOOLEAN, label TEXT");
 }
 
 function addTable(table,data) {
@@ -571,13 +573,17 @@ function addTable(table,data) {
 }
 
 function addCol(table,col,type, def) {
-  serverdb.get("SELECT "+col+" FROM "+table+";", function(err,row) {
-    if ( err != null && err.toString().match("no such column") ) { 
-      serverdb.run("ALTER TABLE " + table + " ADD COLUMN " + col + " " + type+";");
-      writedb("UPDATE " + table + " SET "+col+"=?;",def);
-      info("Updating Table '"+table+"' : Adding Col '"+col+"' ("+type+")");
-    }
-  }  );
+  setTimeout( function() {
+    serverdb.get("SELECT "+col+" FROM "+table+";", function(err,row) {
+      if ( err != null && err.toString().match("no such column") ) { 
+        serverdb.run("ALTER TABLE " + table + " ADD COLUMN " + col + " " + type+";");
+        writedb("UPDATE " + table + " SET "+col+"=?;",def);
+        info("Updating Table '"+table+"' : Adding Col '"+col+"' ("+type+")");
+      }
+    }  );
+  }, 500);
+
+
 }
 
 function writedb() {
