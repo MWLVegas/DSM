@@ -403,15 +403,30 @@ function announceScreamer(data) {
 
   // TODO if Enabled
   //  AIDirector: Spawning scouts @ ((4688.0, 163.0, 1528.0)) heading towards ((4619.0, 179.0, 1614.0))<<<
+  var spawnloc = data.substr(data.indexOf("((")+2,data.indexOf("))")-data.indexOf("((")-2);
   data = data.substr(data.lastIndexOf("((")+2).split(")");
   var loc1 = data[0];
+  var spawn = spawnloc.replace(/ /g,"").split(",");
+  var header = loc1.replace(/ /g,"").split(",");
+  
+  var direction = true;
+  // TODO : Directions
+  //
   info( "Screamer Spawn: " + loc1);
-  for ( var x in playerList )
+              var dir = " from the ";
+
+                  var z = spawn[2] - header[2];
+                      var x = spawn[0] - header[0];
+
+                          if ( z < -100 ) { dir = dir + "north"; } else if ( z > 100 ) { dir = dir + "south"; }
+                              if ( x < -100 ) { dir = dir + "east"; } else if ( x > 100 ) { dir = dir + "west"; }
+
+  for ( var x1 in playerList )
   {
-    var loc2 = playerList[x].pos;
+    var loc2 = playerList[x1].pos;
     var dist = getDistance(loc1,loc2);
-    if ( dist < 50 ) { pm(x,"[cc0000]WARNING: There is a Screamer heading in your direction![ffffff]"); }
-    info("Distance: " + x + " " +  dist );
+    if ( dist < 60 ) { pm(x1,"[cc0000]WARNING: There is a Screamer heading in your direction" + ( direction ? dir : "" ) + "![ffffff]"); }
+    info("Distance: " + x1 + " " +  dist );
   }
 }
 
