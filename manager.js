@@ -77,7 +77,7 @@ if ( line.match("Press 'exit'" ) ) {
   connected = true;
   console.log("Logged in!");
   doLoginStuff();
-  //  say("DSM Online. Use '/help' for assistance!");
+   say("DSM Online. Use '/help' for assistance!");
 } 
 
 }
@@ -405,13 +405,13 @@ function announceScreamer(data) {
   //  AIDirector: Spawning scouts @ ((4688.0, 163.0, 1528.0)) heading towards ((4619.0, 179.0, 1614.0))<<<
   data = data.substr(data.lastIndexOf("((")+2).split(")");
   var loc1 = data[0];
-  //info( "Screamer Spawn: " + loc1);
+  info( "Screamer Spawn: " + loc1);
   for ( var x in playerList )
   {
     var loc2 = playerList[x].pos;
     var dist = getDistance(loc1,loc2);
-    if ( dist < 35 ) { pm(x,"[cc0000]WARNING: There is a Screamer heading in your direction!"); }
-    //info("Distance: " + x + " " +  dist );
+    if ( dist < 50 ) { pm(x,"[cc0000]WARNING: There is a Screamer heading in your direction![ffffff]"); }
+    info("Distance: " + x + " " +  dist );
   }
 }
 
@@ -460,7 +460,6 @@ function playerLogin(data) {
 }
 
 function showMOTD(player) {
-  var steamid = playerList[player].steamid;
   serverdb.get("SELECT motd FROM server_info;", function(err,row) {
     if (err) {
       error(row);
