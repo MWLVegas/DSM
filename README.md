@@ -7,6 +7,8 @@ Dragoon Server Manager - A 7 Days to Die server manager
 
 TODO/Not Documented TODO
 
+LCB list
+
 Commands:
 Teleport to Player
 Teleport to Landmark
