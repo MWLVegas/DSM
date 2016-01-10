@@ -27,6 +27,7 @@ var day = 0;
 var chatLog = [];
 var repeatingTasks = [];
 var playerList = {};
+var zgates = {};
 var input = [];
 var coinPerZKill = 5.0;
 var coinPerMinute = 0.5;
@@ -54,6 +55,8 @@ if ( serverid == 0 ) {
 
 initDB();
 setupRepeatingTasks();
+loadzGates();
+
 var processInputTimer = setInterval( function() { processInput(); }, 100 );
 
 client.on('data', function(data) {
@@ -142,7 +145,10 @@ function isCommand(line)
 
   if ( inp[2].trim().startsWith("/") )
   {
-    var cmd = inp[2].trim().substr(1);
+    var input = inp[2].trim().split(" ");
+    var cmd = input[0].toLowerCase().trim().substr(1);
+    input = input.slice(1);
+    info(input);
 
     info("Attempted Command: " + cmd + " from " + player );
     switch(cmd) {
@@ -157,6 +163,8 @@ function isCommand(line)
       case 'shutdown': shutdownManager(player); break;
       case 'plist': showPlayerList(player);
       case 'coords': coords = playerList[player].pos; pm(player,"Coords: " + coords + " : Nice Coords: " + niceCoords(coords,true)); break;
+      case 'zgate': zgateCmd(player, input); break;
+
     }
 
     //TODO  Valid Command: Log it to Web Console
@@ -235,6 +243,173 @@ function getCoins(player, show, add, sub) {
   });
 }
 
+function zgateCmd(player, input) {
+  if ( input.length == 0 ) {
+    pm(player,"You must provide a valid gate command.");
+    return;
+  }
+
+//  info(input);
+  var cmd = input[0];
+  input = input.slice(1);
+
+  switch(cmd) {
+    default: pm(player,"You must provide a valid gate command."); return;
+    case 'new':
+    case 'create': zgateCreate(player, input); return;
+    case 'remove': 
+    case 'delete': zgateDelete(player, input); return;
+    case 'list': zgateList(player); return;
+    case 'mod': 
+    case 'edit': zgateEdit(player, input); return;
+    case 'use': zgateUse(player,input); return;
+  }
+}
+
+function loadzGates() {
+  zgates.length = 0;
+  zgates = {};
+ 
+  serverdb.all("SELECT * FROM gate_info;", function(err,res) { if ( err ) { info(err); return } 
+    //addTable("gate_info", "owner TEXT, coords TEXT, public BOOLEAN, label TEXT");
+    if ( res == null ) { info("No zGates located."); return; } 
+
+    res.forEach(function(row) {
+//    info(res);
+//
+//   for ( var i = 0; i < res.rows.length; i++ ) {
+//      var row = res.rows[i];
+
+      var owner = row.owner;
+      var coords = row.coords;
+      var pub = row.public;
+      var label = row.label;
+
+      zgates[label] = { pos: coords, public: pub, owner: owner };
+      info("zGate Loaded: " + label + ": " + coords );
+    });
+  });
+}
+
+function zgateUse(player,input) {
+  if ( input.length != 1 ) {
+    pm(player,"You must provide a label for the gate you wish to use.");
+    return;
+  }
+
+  var name = input[0].toLowerCase();
+  
+  if ( !zgates[name] ) {
+    pm(player,"A gate with that label dose not exist.");
+    return;
+  }
+ 
+  var gate = zgates[name];
+
+  if ( !gate.public && gate.owner != playerList[player].steamid ) {
+    pm(player,"That is not a gate you are able to use.");
+    return;
+  }
+
+  // Cost
+
+  // Cooldown
+
+  var coords = gate.pos.replace(/,/g,'');
+  info(coords);
+  send("teleportplayer " + player + " " + coords);
+
+}
+
+
+function zgateCreate(player, input) {
+  if ( input.length != 1 )
+  {
+    pm(player,"The gate creation requires a one word, unique name.");
+    return;
+  }
+
+  var name = input[0].toLowerCase();
+  var steamid = playerList[player].steamid;
+
+   var c = playerList[player].pos.split(",");
+   var pos = parseInt(c[0]) + " " + parseInt(c[1]) + " " + parseInt(c[2]);
+
+
+  if ( zgates[name] || zgates[name] != null ) {
+    pm(player,"That gate label already exists. You need to choose a unique label.");
+    return;
+  }
+
+  // Count zGates for Limit
+  
+  // Cost Stuff
+
+  writedb("INSERT INTO gate_info (owner, coords, public, label) VALUES(?,?,?,?);", steamid, pos, false, name);
+  pm(player,"Gate created at " + pos + " with label '"+name+"'.");
+  loadzGates();
+}
+
+function zgateDelete(player,input) {
+  if ( input.length != 1 )
+  {
+    pm(player,"Gate deletion requires the use of the label."); 
+    return;
+  }
+
+  var name = input[0].toLowerCase();
+  var steamid = playerList[player].steamid;
+
+  if ( !zgates[name] ) {
+    pm(player,"That gate does not exist. Check your spelling and try again.");
+    return;
+  }
+
+  if ( zgates[name].owner != playerList[player].steamid )  {
+    pm(player,"Deleting a gate that doesn't belong to you? How droll.");
+    return;
+  }
+
+  writedb("DELETE FROM gate_info WHERE label=?;",name);
+  pm(player,"Gate deleted.");
+  loadzGates();
+
+}
+
+function zgateList(player) { 
+}
+
+function zgateEdit(player, input) {
+info("Zgate edit! " + input );
+
+   if ( input.length < 2 )
+       {
+             pm(player,"Modifying a gate requires at least one argument.");
+             pm(player,"Syntax: /zgate edit <name> <options>");
+             return;
+       }
+
+      var name = input[0].toLowerCase();
+      var steamid = playerList[player].steamid;
+      var cmd = input[1].toLowerCase();
+info(cmd);
+
+         if ( !zgates[name] ) {
+               pm(player,"That gate does not exist. Check your spelling and try again.");
+                   return;
+                     }
+
+           if ( zgates[name].owner != playerList[player].steamid )  {
+                 pm(player,"Editing a gate that isn't yours? Cute.");
+                     return;
+                       }
+
+           switch ( cmd ) {
+             default: pm(player,"That is not a valid edit subcommand."); return;
+             case 'public': zgates[name].public = !zgates[name].public; pm(player,"Gate '"+name+"' is now " + ( zgates[name].public ? "public" : "private" ) ); writedb("UPDATE gate_info SET public=? where label=?;",zgates[name].public,name); return;
+           }
+
+}
 
 
 function sethome(player) {
@@ -408,18 +583,18 @@ function announceScreamer(data) {
   var loc1 = data[0];
   var spawn = spawnloc.replace(/ /g,"").split(",");
   var header = loc1.replace(/ /g,"").split(",");
-  
+
   var direction = true;
   // TODO : Directions
   //
   info( "Screamer Spawn: " + loc1);
-              var dir = " from the ";
+  var dir = " from the ";
 
-                  var z = spawn[2] - header[2];
-                      var x = spawn[0] - header[0];
+  var z = spawn[2] - header[2];
+  var x = spawn[0] - header[0];
 
-                          if ( z < -100 ) { dir = dir + "north"; } else if ( z > 100 ) { dir = dir + "south"; }
-                              if ( x < -100 ) { dir = dir + "east"; } else if ( x > 100 ) { dir = dir + "west"; }
+  if ( z < -100 ) { dir = dir + "north"; } else if ( z > 100 ) { dir = dir + "south"; }
+  if ( x < -100 ) { dir = dir + "east"; } else if ( x > 100 ) { dir = dir + "west"; }
 
   for ( var x1 in playerList )
   {
