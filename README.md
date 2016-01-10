@@ -20,11 +20,6 @@ Landmarks:
   Cost
   Time Between Use
   
-Player Waypoints:
-  Location
-  Owned By
-  Cost to use
-  Public
 
 PK Penaltys
   Jail - Location & Time
