@@ -286,7 +286,7 @@ function loadzGates() {
       var label = row.label;
 
       zgates[label] = { pos: coords, public: pub, owner: owner };
-      info("zGate Loaded: " + label + ": " + coords );
+//      info("zGate Loaded: " + label + ": " + coords );
     });
   });
 }
@@ -316,7 +316,7 @@ function zgateUse(player,input) {
   // Cooldown
 
   var coords = gate.pos.replace(/,/g,'');
-  info(coords);
+//  info(coords);
   send("teleportplayer " + player + " " + coords);
 
 }
@@ -372,7 +372,8 @@ function zgateDelete(player,input) {
 
   writedb("DELETE FROM gate_info WHERE label=?;",name);
   pm(player,"Gate deleted.");
-  loadzGates();
+  delete zgates['name'];
+//  loadzGates();
 
 }
 
@@ -380,7 +381,6 @@ function zgateList(player) {
 }
 
 function zgateEdit(player, input) {
-info("Zgate edit! " + input );
 
    if ( input.length < 2 )
        {
@@ -392,7 +392,7 @@ info("Zgate edit! " + input );
       var name = input[0].toLowerCase();
       var steamid = playerList[player].steamid;
       var cmd = input[1].toLowerCase();
-info(cmd);
+//info(cmd);
 
          if ( !zgates[name] ) {
                pm(player,"That gate does not exist. Check your spelling and try again.");
@@ -552,7 +552,9 @@ function parseLine(line) {
 
   if ( line.match("disconnected after") && line.match("INF Player") )  { // Disconnects
     var out1 = line.substr(line.indexOf("INF Player")).split(" ");
-    delete playerList[out1[3]];
+    var name = out1[2];
+    info("Removing " + name + " from PlayerList");
+    delete playerList[name];
   }
 
   if ( line.match("Computed flight paths for") ) { // Airdrop incoming
